@@ -8,43 +8,62 @@ import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { PUBLIC_KEY } from '../decorators/public.decorator';
 
-export const jwtAuthGuard = (jwtService: JwtService, reflector: Reflector) => {
-  @Injectable()
-  class JwtAuthGuardImpl implements CanActivate {
-    async canActivate(context: ExecutionContext): Promise<boolean> {
-      const isPublic = reflector.getAllAndOverride<boolean>(PUBLIC_KEY, [
-        context.getHandler(),
-        context.getClass(),
-      ]);
+interface AuthenticatedRequest {
+  headers: {
+    authorization?: string;
+  };
+  user?: Record<string, unknown>;
+}
 
-      if (isPublic) {
-        return true;
-      }
+/**
+ * Factory function to create JwtAuthGuard instance
+ * This allows the guard to be created with proper dependency injection
+ */
+export function jwtAuthGuard(jwtService: JwtService, reflector: Reflector): JwtAuthGuard {
+  return new JwtAuthGuard(jwtService, reflector);
+}
 
-      const request = context.switchToHttp().getRequest();
-      const [type, token] = request.headers.authorization?.split(' ') ?? [];
+@Injectable()
+export class JwtAuthGuard implements CanActivate {
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly reflector: Reflector,
+  ) {}
 
-      if (!token || type !== 'Bearer') {
-        throw new UnauthorizedException('Invalid authentication token');
-      }
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const isPublic = this.reflector.getAllAndOverride<boolean>(PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
 
-      try {
-        const payload = await jwtService.verifyAsync(token);
-        request['user'] = payload;
-      } catch {
-        throw new UnauthorizedException('Invalid or expired token');
-      }
-
+    if (isPublic) {
       return true;
     }
 
-    handleRequest(err: any, user: any) {
-      if (err || !user) {
-        throw err || new UnauthorizedException();
-      }
-      return user;
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
+    const authHeader: string | undefined = request.headers.authorization;
+    const authParts: string[] = authHeader ? authHeader.split(' ') : [];
+    const type: string = authParts[0] ?? '';
+    const token: string = authParts[1] ?? '';
+
+    if (!token || type !== 'Bearer') {
+      throw new UnauthorizedException('Invalid authentication token');
     }
+
+    try {
+      const payload = await this.jwtService.verifyAsync<Record<string, unknown>>(token);
+      request.user = payload;
+    } catch {
+      throw new UnauthorizedException('Invalid or expired token');
+    }
+
+    return true;
   }
 
-  return new JwtAuthGuardImpl();
-};
+  handleRequest<TUser = Record<string, unknown>>(err: Error | null, user: TUser | false): TUser {
+    if (err || !user) {
+      throw err ?? new UnauthorizedException();
+    }
+    return user;
+  }
+}

@@ -1,4 +1,4 @@
-import { Module, Global } from '@nestjs/common';
+import { Module, Global, CanActivate } from '@nestjs/common';
 import { JwtService as NestJwtService } from '@nestjs/jwt';
 import { JwtService } from './services/jwt.service';
 import { jwtAuthGuard } from './guards/jwt-auth.guard';
@@ -21,28 +21,28 @@ import { Reflector } from '@nestjs/core';
     // This allows the JwtAuthGuard to work with our Ed25519 implementation
     {
       provide: NestJwtService,
-      useFactory: () => {
+      useFactory: (): NestJwtService => {
         // Create instance of our custom JwtService
         const service = new JwtService();
         // Initialize keys synchronously would be ideal, but we need async
         // The onModuleInit will be called by NestJS after construction
-        return service;
+        return service as unknown as NestJwtService;
       },
     },
     JwtService,
     {
       provide: 'JWT_AUTH_GUARD',
-      useFactory: (jwtService: JwtService, reflector: Reflector) => {
+      useFactory: (jwtService: JwtService, reflector: Reflector): CanActivate => {
         // Type assertion to handle the interface mismatch between our custom JwtService
         // and @nestjs/jwt's JwtService. Both have verifyAsync method.
-        return jwtAuthGuard(jwtService as unknown as NestJwtService, reflector);
+        return jwtAuthGuard(jwtService as unknown as NestJwtService, reflector) as CanActivate;
       },
       inject: [JwtService, Reflector],
     },
     {
       provide: 'ROLES_GUARD',
-      useFactory: (reflector: Reflector) => {
-        return rolesGuard(reflector);
+      useFactory: (reflector: Reflector): CanActivate => {
+        return rolesGuard(reflector) as CanActivate;
       },
       inject: [Reflector],
     },

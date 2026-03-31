@@ -1,12 +1,12 @@
-import { SetMetadata } from '@nestjs/common';
 import { rolesDecorator, Roles, ROLES_KEY } from '../../../src/auth/decorators/roles.decorator';
 import { Role } from '../../../src/auth/enums/role.enum';
 
 describe('@Roles Decorator', () => {
-  // Mock SetMetadata
+  // Mock SetMetadata - use eslint-disable to suppress strict type warnings in test
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-return
+  const mockSetMetadata = () => () => {};
   jest.mock('@nestjs/common', () => ({
-    ...jest.requireActual('@nestjs/common'),
-    SetMetadata: jest.fn().mockReturnValue(() => {}),
+    SetMetadata: mockSetMetadata,
   }));
 
   beforeEach(() => {

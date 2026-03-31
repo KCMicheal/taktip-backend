@@ -1,8 +1,21 @@
 import { ExecutionContext } from '@nestjs/common';
 
+interface MockUser {
+  sub?: string | null;
+  email?: string | null;
+  role?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  profile?: {
+    firstName?: string | null;
+    lastName?: string | null;
+  };
+  [key: string]: unknown;
+}
+
 describe('@CurrentUser Decorator', () => {
   // Mock execution context for testing
-  const createMockContext = (user: any): ExecutionContext => ({
+  const createMockContext = (user: MockUser | undefined | null): ExecutionContext => ({
     switchToHttp: () => ({
       getRequest: () => ({
         user,
@@ -13,10 +26,10 @@ describe('@CurrentUser Decorator', () => {
   } as ExecutionContext);
 
   // Simulate what the decorator does internally
-  const simulateCurrentUserDecorator = (data: string | undefined, ctx: ExecutionContext) => {
-    const request = ctx.switchToHttp().getRequest();
+  const simulateCurrentUserDecorator = (data: string | undefined, ctx: ExecutionContext): MockUser | undefined | null => {
+    const request = ctx.switchToHttp().getRequest<{ user: MockUser | undefined | null }>();
     const user = request.user;
-    return data ? user?.[data] : user;
+    return data ? (user?.[data] as MockUser | undefined) : user;
   };
 
   describe('CurrentUser decorator', () => {
@@ -56,11 +69,11 @@ describe('@CurrentUser Decorator', () => {
 
       // Assert
       expect(result).toEqual(mockUser);
-      expect(result.sub).toBe('123');
-      expect(result.email).toBe('john@example.com');
-      expect(result.role).toBe('admin');
-      expect(result.firstName).toBe('John');
-      expect(result.lastName).toBe('Doe');
+      expect(result!.sub).toBe('123');
+      expect(result!.email).toBe('john@example.com');
+      expect(result!.role).toBe('admin');
+      expect(result!.firstName).toBe('John');
+      expect(result!.lastName).toBe('Doe');
     });
 
     it('should return undefined when no user is attached', () => {

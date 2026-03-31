@@ -1,12 +1,11 @@
 import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
-import { rolesGuard } from '../../../src/auth/guards/roles.guard';
-import { ROLES_KEY } from '../../../src/auth/decorators/roles.decorator';
+import { rolesGuard, RolesGuard } from '../../../src/auth/guards/roles.guard';
 import { Role } from '../../../src/auth/enums/role.enum';
 
 describe('RolesGuard', () => {
-  let guard: ReturnType<typeof rolesGuard>;
+  let guard: RolesGuard;
   let reflector: Reflector;
 
   const mockReflector = {
@@ -33,8 +32,8 @@ describe('RolesGuard', () => {
   });
 
   const createMockExecutionContext = (
-    user: Record<string, any> | undefined | null,
-    handler: any = {},
+    user: Record<string, unknown> | undefined | null,
+    handler: Record<string, unknown> = {},
   ): ExecutionContext => {
     return {
       switchToHttp: () => ({
@@ -44,7 +43,7 @@ describe('RolesGuard', () => {
       }),
       getHandler: () => handler,
       getClass: () => ({}),
-    } as ExecutionContext;
+    } as unknown as ExecutionContext;
   };
 
   describe('canActivate', () => {

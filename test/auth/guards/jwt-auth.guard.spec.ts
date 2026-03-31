@@ -5,8 +5,13 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { jwtAuthGuard } from '../../../src/auth/guards/jwt-auth.guard';
 import { PUBLIC_KEY } from '../../../src/auth/decorators/public.decorator';
 
+interface JwtAuthGuardType {
+  canActivate(context: ExecutionContext): Promise<boolean>;
+  handleRequest<TUser = Record<string, unknown>>(err: Error | null, user: TUser | false): TUser;
+}
+
 describe('JwtAuthGuard', () => {
-  let guard: ReturnType<typeof jwtAuthGuard>;
+  let guard: JwtAuthGuardType;
   let reflector: Reflector;
   let jwtService: JwtService;
 
@@ -36,7 +41,7 @@ describe('JwtAuthGuard', () => {
     jwtService = module.get<JwtService>(JwtService);
     reflector = module.get<Reflector>(Reflector);
 
-    guard = jwtAuthGuard(jwtService, reflector);
+    guard = jwtAuthGuard(jwtService as unknown as JwtService, reflector);
   });
 
   afterEach(() => {

@@ -1,11 +1,11 @@
-import { SetMetadata } from '@nestjs/common';
 import { publicDecorator, PUBLIC_KEY, Public } from '../../../src/auth/decorators/public.decorator';
 
 describe('@Public Decorator', () => {
   // Mock SetMetadata to verify it's called correctly
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-return
+  const mockSetMetadata = () => () => {};
   jest.mock('@nestjs/common', () => ({
-    ...jest.requireActual('@nestjs/common'),
-    SetMetadata: jest.fn().mockReturnValue(() => {}),
+    SetMetadata: mockSetMetadata,
   }));
 
   beforeEach(() => {
@@ -61,8 +61,6 @@ describe('@Public Decorator', () => {
       // At runtime this would set metadata that JwtAuthGuard checks
       
       // We verify the key is correctly defined for the guard to find
-      const mockTarget = {};
-      const mockKey = 'handler';
       
       // When applied to a handler, the decorator will call SetMetadata
       // We can't fully test this without NestJS runtime, but we verify the key exists
