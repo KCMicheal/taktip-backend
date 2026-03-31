@@ -18,7 +18,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
-    "check-pr": "./scripts/check-pr-review.sh"
+    "check-pr": "./scripts/check-pr-review.sh",
+    "setup": "git config core.hooksPath .githooks && chmod +x .githooks/* scripts/*.sh"
   },
   "dependencies": {
     "@nestjs/bull": "^10.0.1",
