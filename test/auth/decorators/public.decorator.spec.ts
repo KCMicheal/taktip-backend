@@ -1,4 +1,4 @@
-import { publicDecorator, PUBLIC_KEY, Public } from '../../../src/auth/decorators/public.decorator';
+import { publicDecorator, PUBLIC_KEY, Public } from '@/auth/decorators/public.decorator';
 
 describe('@Public Decorator', () => {
   // Mock SetMetadata to verify it's called correctly

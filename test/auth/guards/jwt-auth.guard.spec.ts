@@ -2,8 +2,8 @@ import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
-import { jwtAuthGuard } from '../../../src/auth/guards/jwt-auth.guard';
-import { PUBLIC_KEY } from '../../../src/auth/decorators/public.decorator';
+import { jwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
+import { PUBLIC_KEY } from '@/auth/decorators/public.decorator';
 
 interface JwtAuthGuardType {
   canActivate(context: ExecutionContext): Promise<boolean>;
