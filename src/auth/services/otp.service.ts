@@ -38,7 +38,7 @@ export class OtpService {
    * Calculate OTP expiry time
    */
   getOtpExpiry(): Date {
-    const expiryMinutes = this.configService.get<number>('OTP_EXPIRY_MINUTES', 15);
+    const expiryMinutes = Number(this.configService.get('OTP_EXPIRY_MINUTES', '15'));
     const expiryTime = new Date();
     expiryTime.setMinutes(expiryTime.getMinutes() + expiryMinutes);
     return expiryTime;
