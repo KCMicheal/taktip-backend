@@ -7,8 +7,10 @@ import { JwtService } from './services/jwt.service';
 import { OtpService } from './services/otp.service';
 import { MailService } from './services/mail.service';
 import { AuthService } from './services/auth.service';
+import { TokenService } from './services/token.service';
 import { AuthController } from './controllers/auth.controller';
 import { User } from './entities/user.entity';
+import { RefreshToken } from './entities/refresh-token.entity';
 import { jwtAuthGuard } from './guards/jwt-auth.guard';
 import { rolesGuard } from './guards/roles.guard';
 
@@ -21,11 +23,12 @@ import { rolesGuard } from './guards/roles.guard';
  * - Role-based access control via @Roles() decorator
  * - Current user extraction via @CurrentUser() decorator
  * - Merchant registration with email OTP verification
+ * - Login with refresh token support
  */
 @Global()
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User]),
+    TypeOrmModule.forFeature([User, RefreshToken]),
     ConfigModule,
   ],
   controllers: [AuthController],
@@ -42,6 +45,7 @@ import { rolesGuard } from './guards/roles.guard';
     // Auth Services
     OtpService,
     MailService,
+    TokenService,
     AuthService,
     // Guards
     {
@@ -64,6 +68,7 @@ import { rolesGuard } from './guards/roles.guard';
     NestJwtService,
     OtpService,
     MailService,
+    TokenService,
     AuthService,
     TypeOrmModule,
   ],

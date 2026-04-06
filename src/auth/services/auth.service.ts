@@ -9,10 +9,25 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User } from '../entities/user.entity';
-import { RegisterMerchantDto, VerifyOtpDto, ResendOtpDto } from '../dto';
+import {
+  RegisterMerchantDto,
+  VerifyOtpDto,
+  ResendOtpDto,
+  LoginDto,
+  RefreshTokenDto,
+} from '../dto';
 import { OtpService } from './otp.service';
 import { MailService } from './mail.service';
+import { TokenService, TokenPair } from './token.service';
 import { Role } from '../enums/role.enum';
+
+export interface UserResponse {
+  id: string;
+  email: string;
+  phone: string | null;
+  role: Role;
+  isVerified: boolean;
+}
 
 @Injectable()
 export class AuthService {
@@ -23,6 +38,7 @@ export class AuthService {
     private readonly userRepository: Repository<User>,
     private readonly otpService: OtpService,
     private readonly mailService: MailService,
+    private readonly tokenService: TokenService,
   ) {}
 
   /**
@@ -144,6 +160,126 @@ export class AuthService {
 
     return {
       message: 'New OTP sent to your email.',
+    };
+  }
+
+  /**
+   * Transform user entity to safe response object
+   */
+  private toUserResponse(user: User): UserResponse {
+    return {
+      id: user.id,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+      isVerified: user.isEmailVerified,
+    };
+  }
+
+  /**
+   * Authenticate user and return tokens
+   */
+  async login(dto: LoginDto): Promise<TokenPair & { user: UserResponse }> {
+    // Find user by email or phone
+    const user = await this.userRepository.findOne({
+      where: [
+        { email: dto.identifier },
+        { phone: dto.identifier },
+      ],
+    });
+
+    // Return generic error to prevent user enumeration
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Check if role matches
+    if (user.role !== dto.role) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Check if user is active
+    if (!user.isActive) {
+      throw new UnauthorizedException('Account is deactivated');
+    }
+
+    // Check if email is verified
+    if (!user.isEmailVerified) {
+      throw new UnauthorizedException('Email not verified');
+    }
+
+    // Verify password
+    const isPasswordValid = await bcrypt.compare(dto.password, user.passwordHash);
+
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Revoke old tokens for this user (same device login)
+    await this.tokenService.revokeOldTokensForUser(user.id);
+
+    // Generate new token pair
+    const tokens = await this.tokenService.generateTokenPair(user.id, user.role);
+
+    return {
+      ...tokens,
+      user: this.toUserResponse(user),
+    };
+  }
+
+  /**
+   * Refresh access token using refresh token
+   */
+  async refreshTokens(
+    dto: RefreshTokenDto,
+  ): Promise<TokenPair & { user: UserResponse }> {
+    const newTokens = await this.tokenService.refreshTokenPair(dto.refreshToken);
+
+    if (!newTokens) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    // Get user data
+    const user = await this.userRepository.findOne({
+      where: { id: (await this.tokenService.validateRefreshToken(dto.refreshToken))?.userId },
+    });
+
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('User not found or inactive');
+    }
+
+    return {
+      ...newTokens,
+      user: this.toUserResponse(user),
+    };
+  }
+
+  /**
+   * Logout - revoke refresh token
+   */
+  async logout(dto: RefreshTokenDto, ipAddress?: string): Promise<{ message: string }> {
+    const revoked = await this.tokenService.revokeRefreshToken(
+      dto.refreshToken,
+      ipAddress,
+    );
+
+    if (!revoked) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    return {
+      message: 'Logged out successfully',
+    };
+  }
+
+  /**
+   * Logout from all devices - revoke all refresh tokens for user
+   */
+  async logoutAll(userId: string): Promise<{ message: string }> {
+    await this.tokenService.revokeAllUserTokens(userId);
+
+    return {
+      message: 'Logged out from all devices',
     };
   }
 }
