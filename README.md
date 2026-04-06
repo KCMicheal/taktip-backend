@@ -202,6 +202,53 @@ taktip-backend/
 | `pnpm run test` | Run unit tests |
 | `pnpm run test:e2e` | Run end-to-end tests |
 | `pnpm run typeorm` | Run TypeORM CLI commands |
+| `pnpm run setup` | Set up git hooks for local development |
+
+---
+
+## 🔄 Development Workflow
+
+### Git Hooks
+
+This project uses **local git hooks** for quality assurance (no cloud CI required):
+
+#### Pre-Commit Hook (`.githooks/pre-commit`)
+- Runs **lint check** (ESLint)
+- Runs **unit tests** (Jest)
+- Blocks commit if any checks fail
+
+#### Pre-Push Hook (`scripts/pre-push.sh`)
+- Runs **build** (TypeScript compilation)
+- Runs **type checking** (tsc --noEmit)
+- Runs **health check** (if Docker is running)
+- Blocks push if any checks fail
+
+### Setup for New Developers
+
+Run once after cloning:
+
+```bash
+# Set up git hooks
+pnpm run setup
+
+# Or manually
+git config core.hooksPath .githooks
+chmod +x .githooks/*
+```
+
+### Manual Quality Gates
+
+If hooks are not set up:
+
+```bash
+# Before committing
+pnpm run lint
+pnpm run test
+
+# Before pushing
+pnpm run build
+pnpm run typecheck
+```
 
 ---
 
