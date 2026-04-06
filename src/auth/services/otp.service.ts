@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
+import { randomInt } from 'crypto';
 
 @Injectable()
 export class OtpService {
@@ -11,11 +12,12 @@ export class OtpService {
 
   /**
    * Generate a random 6-digit OTP
+   * Uses crypto.randomInt for cryptographically secure random generation
    */
   generateOtp(): string {
     let otp = '';
     for (let i = 0; i < this.otpLength; i++) {
-      otp += Math.floor(Math.random() * 10).toString();
+      otp += randomInt(0, 9).toString();
     }
     return otp;
   }
