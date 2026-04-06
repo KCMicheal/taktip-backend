@@ -27,7 +27,7 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
-  const port = configService.get<number>('APP_PORT', 3001);
+  const port = Number(configService.get('APP_PORT', '3001'));
   await app.listen(port);
   console.log(`🚀 TakTip Backend running on http://localhost:${port}`);
   console.log(`📚 API Docs available at http://localhost:${port}/api/docs`);
