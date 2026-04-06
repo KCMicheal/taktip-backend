@@ -5,6 +5,7 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { parse } from 'pg-connection-string';
 import { APP_GUARD } from '@nestjs/core';
 import { HealthModule } from './health/health.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { HealthModule } from './health/health.module';
         ttl: 60000, // 1 minute in milliseconds
       },
     ]),
+    AuthModule,
     HealthModule,
   ],
   controllers: [],

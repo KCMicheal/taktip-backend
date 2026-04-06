@@ -1,9 +1,16 @@
 import { Module, Global, CanActivate } from '@nestjs/common';
 import { JwtService as NestJwtService } from '@nestjs/jwt';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConfigModule } from '@nestjs/config';
+import { Reflector } from '@nestjs/core';
 import { JwtService } from './services/jwt.service';
+import { OtpService } from './services/otp.service';
+import { MailService } from './services/mail.service';
+import { AuthService } from './services/auth.service';
+import { AuthController } from './controllers/auth.controller';
+import { User } from './entities/user.entity';
 import { jwtAuthGuard } from './guards/jwt-auth.guard';
 import { rolesGuard } from './guards/roles.guard';
-import { Reflector } from '@nestjs/core';
 
 /**
  * Auth Module - Provides JWT authentication and authorization functionality
@@ -13,28 +20,33 @@ import { Reflector } from '@nestjs/core';
  * - Public endpoint marking via @Public() decorator
  * - Role-based access control via @Roles() decorator
  * - Current user extraction via @CurrentUser() decorator
+ * - Merchant registration with email OTP verification
  */
 @Global()
 @Module({
+  imports: [
+    TypeOrmModule.forFeature([User]),
+    ConfigModule,
+  ],
+  controllers: [AuthController],
   providers: [
-    // Provide our custom Ed25519 JwtService as the JwtService from @nestjs/jwt
-    // This allows the JwtAuthGuard to work with our Ed25519 implementation
+    // JWT Services
     {
       provide: NestJwtService,
       useFactory: (): NestJwtService => {
-        // Create instance of our custom JwtService
         const service = new JwtService();
-        // Initialize keys synchronously would be ideal, but we need async
-        // The onModuleInit will be called by NestJS after construction
         return service as unknown as NestJwtService;
       },
     },
     JwtService,
+    // Auth Services
+    OtpService,
+    MailService,
+    AuthService,
+    // Guards
     {
       provide: 'JWT_AUTH_GUARD',
       useFactory: (jwtService: JwtService, reflector: Reflector): CanActivate => {
-        // Type assertion to handle the interface mismatch between our custom JwtService
-        // and @nestjs/jwt's JwtService. Both have verifyAsync method.
         return jwtAuthGuard(jwtService as unknown as NestJwtService, reflector) as CanActivate;
       },
       inject: [JwtService, Reflector],
@@ -47,6 +59,13 @@ import { Reflector } from '@nestjs/core';
       inject: [Reflector],
     },
   ],
-  exports: [JwtService, NestJwtService],
+  exports: [
+    JwtService,
+    NestJwtService,
+    OtpService,
+    MailService,
+    AuthService,
+    TypeOrmModule,
+  ],
 })
 export class AuthModule {}
