@@ -1,8 +1,11 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { parse } from 'pg-connection-string';
+import { APP_GUARD } from '@nestjs/core';
 import { HealthModule } from './health/health.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -44,9 +47,31 @@ import { HealthModule } from './health/health.module';
         return config;
       },
     }),
+    // Rate limiting configuration
+    // Login endpoints: 5 requests per 15 minutes
+    // Global endpoints: 120 requests per minute
+    ThrottlerModule.forRoot([
+      {
+        name: 'login',
+        limit: 5,
+        ttl: 900000, // 15 minutes in milliseconds
+      },
+      {
+        name: 'global',
+        limit: 120,
+        ttl: 60000, // 1 minute in milliseconds
+      },
+    ]),
+    AuthModule,
     HealthModule,
   ],
   controllers: [],
-  providers: [],
+  providers: [
+    // Apply ThrottlerGuard globally
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}
