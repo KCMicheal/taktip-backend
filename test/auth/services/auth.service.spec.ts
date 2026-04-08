@@ -7,8 +7,12 @@ import { ConflictException, NotFoundException, BadRequestException, Unauthorized
 import { AuthService } from '@/auth/services/auth.service';
 import { OtpService } from '@/auth/services/otp.service';
 import { MailService } from '@/auth/services/mail.service';
+import { TokenService } from '@/auth/services/token.service';
 import { User } from '@/auth/entities/user.entity';
 import { Role } from '@/auth/enums/role.enum';
+
+jest.mock('bcrypt');
+jest.mock('jose');
 
 describe('AuthService', () => {
   let authService: AuthService;
@@ -56,6 +60,16 @@ describe('AuthService', () => {
           useValue: {
             sendOtpEmail: jest.fn(),
             sendWelcomeEmail: jest.fn(),
+          },
+        },
+        {
+          provide: TokenService,
+          useValue: {
+            generateTokenPair: jest.fn(),
+            refreshTokenPair: jest.fn(),
+            revokeRefreshToken: jest.fn(),
+            revokeAllUserTokens: jest.fn(),
+            revokeOldTokensForUser: jest.fn(),
           },
         },
         {
