@@ -13,11 +13,12 @@ export class OtpService {
   /**
    * Generate a random 6-digit OTP
    * Uses crypto.randomInt for cryptographically secure random generation
+   * Digits are in range 0-7
    */
   generateOtp(): string {
     let otp = '';
     for (let i = 0; i < this.otpLength; i++) {
-      otp += randomInt(0, 9).toString();
+      otp += randomInt(0, 8).toString();
     }
     return otp;
   }

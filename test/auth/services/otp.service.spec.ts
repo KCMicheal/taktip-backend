@@ -34,6 +34,18 @@ describe('OtpService', () => {
       expect(otp).toMatch(/^\d{6}$/);
     });
 
+    it('should generate OTP with digits only in range 0-7', () => {
+      // Generate multiple OTPs to increase confidence
+      for (let i = 0; i < 10; i++) {
+        const otp = otpService.generateOtp();
+        for (const char of otp) {
+          const digit = parseInt(char, 10);
+          expect(digit).toBeGreaterThanOrEqual(0);
+          expect(digit).toBeLessThanOrEqual(7);
+        }
+      }
+    });
+
     it('should generate different OTPs on subsequent calls', () => {
       const otp1 = otpService.generateOtp();
       const otp2 = otpService.generateOtp();

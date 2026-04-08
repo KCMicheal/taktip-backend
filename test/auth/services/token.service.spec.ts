@@ -235,7 +235,9 @@ describe('TokenService', () => {
       const result = await tokenService.refreshTokenPair(oldRefreshToken);
 
       expect(result).toBeDefined();
-      expect(result?.accessToken).toBe(newAccessToken);
+      expect(result?.tokens.accessToken).toBe(newAccessToken);
+      expect(result?.userId).toBe('user-id');
+      expect(result?.role).toBe(Role.MERCHANT);
     });
 
     it('should return null for invalid refresh token', async () => {

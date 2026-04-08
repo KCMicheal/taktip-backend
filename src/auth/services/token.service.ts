@@ -15,6 +15,12 @@ export interface TokenPair {
   tokenType: string;
 }
 
+export interface RefreshTokenResult {
+  tokens: TokenPair;
+  userId: string;
+  role: Role;
+}
+
 export interface JwtPayload {
   sub: string;
   role: Role;
@@ -131,20 +137,31 @@ export class TokenService {
 
   /**
    * Generate new token pair from valid refresh token
+   * Returns user data along with tokens to avoid re-validation after revocation
    */
   async refreshTokenPair(
     refreshToken: string,
-  ): Promise<TokenPair | null> {
+  ): Promise<RefreshTokenResult | null> {
     const storedToken = await this.validateRefreshToken(refreshToken);
 
     if (!storedToken || !storedToken.user) {
       return null;
     }
 
+    // Save user data before revoking
+    const userId = storedToken.userId;
+    const role = storedToken.user.role;
+
     // Revoke the old refresh token
     await this.revokeRefreshToken(refreshToken);
 
     // Generate new token pair
-    return this.generateTokenPair(storedToken.userId, storedToken.user.role);
+    const tokens = await this.generateTokenPair(userId, role);
+
+    return {
+      tokens,
+      userId,
+      role,
+    };
   }
 }

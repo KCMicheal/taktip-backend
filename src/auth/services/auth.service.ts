@@ -233,15 +233,15 @@ export class AuthService {
   async refreshTokens(
     dto: RefreshTokenDto,
   ): Promise<TokenPair & { user: UserResponse }> {
-    const newTokens = await this.tokenService.refreshTokenPair(dto.refreshToken);
+    const result = await this.tokenService.refreshTokenPair(dto.refreshToken);
 
-    if (!newTokens) {
+    if (!result) {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
-    // Get user data
+    // Get user data using userId from result (avoid re-validation after revocation)
     const user = await this.userRepository.findOne({
-      where: { id: (await this.tokenService.validateRefreshToken(dto.refreshToken))?.userId },
+      where: { id: result.userId },
     });
 
     if (!user || !user.isActive) {
@@ -249,7 +249,7 @@ export class AuthService {
     }
 
     return {
-      ...newTokens,
+      ...result.tokens,
       user: this.toUserResponse(user),
     };
   }

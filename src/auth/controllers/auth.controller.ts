@@ -5,12 +5,14 @@ import {
   HttpCode,
   HttpStatus,
   Headers,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from '../services/auth.service';
 import { UserResponse } from '../services/auth.service';
 import { Public } from '../decorators/public.decorator';
 import { CurrentUser } from '../decorators/current-user.decorator';
+import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import {
   RegisterMerchantDto,
   VerifyOtpDto,
@@ -109,6 +111,7 @@ export class AuthController {
 
   @Post('logout-all')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Logout from all devices' })
   @ApiResponse({
