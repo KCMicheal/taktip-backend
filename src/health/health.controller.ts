@@ -3,7 +3,7 @@ import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { DataSource } from 'typeorm';
 import Redis from 'ioredis';
 
-@ApiTags('Health')
+@ApiTags('health')
 @Controller('health')
 export class HealthController {
   constructor(private readonly dataSource: DataSource) {}
