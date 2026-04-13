@@ -19,6 +19,14 @@ import {
   ResendOtpDto,
   LoginDto,
   RefreshTokenDto,
+  RegisterMerchantResponseDto,
+  VerifyOtpResponseDto,
+  ResendOtpResponseDto,
+  LoginResponseDto,
+  RefreshTokenResponseDto,
+  LogoutResponseDto,
+  LogoutAllResponseDto,
+  ErrorResponseDto,
 } from '../dto';
 
 @ApiTags('auth')
@@ -32,9 +40,10 @@ export class AuthController {
   @ApiResponse({
     status: 201,
     description: 'Registration initiated, OTP sent to email',
+    type: RegisterMerchantResponseDto,
   })
-  @ApiResponse({ status: 400, description: 'Invalid input' })
-  @ApiResponse({ status: 409, description: 'Email already registered' })
+  @ApiResponse({ status: 400, description: 'Invalid input', type: ErrorResponseDto })
+  @ApiResponse({ status: 409, description: 'Email already registered', type: ErrorResponseDto })
   async registerMerchant(@Body() dto: RegisterMerchantDto) {
     return this.authService.registerMerchant(dto);
   }
@@ -45,9 +54,10 @@ export class AuthController {
   @ApiResponse({
     status: 200,
     description: 'Email verified, user activated',
+    type: VerifyOtpResponseDto,
   })
-  @ApiResponse({ status: 400, description: 'Invalid or expired OTP' })
-  @ApiResponse({ status: 404, description: 'User not found' })
+  @ApiResponse({ status: 400, description: 'Invalid or expired OTP', type: ErrorResponseDto })
+  @ApiResponse({ status: 404, description: 'User not found', type: ErrorResponseDto })
   async verifyOtp(@Body() dto: VerifyOtpDto) {
     return this.authService.verifyOtp(dto);
   }
@@ -58,8 +68,9 @@ export class AuthController {
   @ApiResponse({
     status: 200,
     description: 'New OTP sent to email',
+    type: ResendOtpResponseDto,
   })
-  @ApiResponse({ status: 404, description: 'User not found' })
+  @ApiResponse({ status: 404, description: 'User not found', type: ErrorResponseDto })
   async resendOtp(@Body() dto: ResendOtpDto) {
     return this.authService.resendOtp(dto);
   }
@@ -71,9 +82,10 @@ export class AuthController {
   @ApiResponse({
     status: 200,
     description: 'Login successful, returns tokens',
+    type: LoginResponseDto,
   })
-  @ApiResponse({ status: 401, description: 'Invalid credentials or email not verified' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
+  @ApiResponse({ status: 401, description: 'Invalid credentials or email not verified', type: ErrorResponseDto })
+  @ApiResponse({ status: 429, description: 'Too many requests', type: ErrorResponseDto })
   async login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
   }
@@ -85,8 +97,9 @@ export class AuthController {
   @ApiResponse({
     status: 200,
     description: 'New tokens generated',
+    type: RefreshTokenResponseDto,
   })
-  @ApiResponse({ status: 401, description: 'Invalid or expired refresh token' })
+  @ApiResponse({ status: 401, description: 'Invalid or expired refresh token', type: ErrorResponseDto })
   async refreshTokens(@Body() dto: RefreshTokenDto) {
     return this.authService.refreshTokens(dto);
   }
@@ -98,8 +111,9 @@ export class AuthController {
   @ApiResponse({
     status: 200,
     description: 'Logged out successfully',
+    type: LogoutResponseDto,
   })
-  @ApiResponse({ status: 401, description: 'Invalid refresh token' })
+  @ApiResponse({ status: 401, description: 'Invalid refresh token', type: ErrorResponseDto })
   async logout(
     @Body() dto: RefreshTokenDto,
     @Headers('x-forwarded-for') forwardedIp: string,
@@ -117,7 +131,9 @@ export class AuthController {
   @ApiResponse({
     status: 200,
     description: 'Logged out from all devices',
+    type: LogoutAllResponseDto,
   })
+  @ApiResponse({ status: 401, description: 'Unauthorized', type: ErrorResponseDto })
   async logoutAll(@CurrentUser() user: UserResponse) {
     return this.authService.logoutAll(user.id);
   }
