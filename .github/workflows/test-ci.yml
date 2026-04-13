@@ -1,19 +1,10 @@
-name: Test CI
+name: Minimal Test
 
 on:
-  push:
-    branches: [test-ci]
   workflow_dispatch:
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      
-      - name: Test
-        run: |
-          echo "Test workflow running"
-          echo "Node version:"
-          node --version
+      - run: echo "Hello World"
