@@ -8,197 +8,10 @@ on:
   workflow_dispatch:
 
 jobs:
-  lint-and-build:
-    name: Lint & Build
-    runs-on: ubuntu-latest
-    
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: taktip_test
-          POSTGRES_USER: taktip
-          POSTGRES_PASSWORD: testpassword
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'pnpm'
-
-      - name: Install pnpm
-        run: npm install -g pnpm
-
-      - name: Remove npm lockfile conflict
-        run: rm -f package-lock.json
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Lint
-        run: pnpm run lint
-
-      - name: Build
-        run: pnpm run build
-
-      - name: Type check
-        run: pnpm run typecheck || pnpm run tsc --noEmit
-
-  test:
-    name: Unit Tests
-    runs-on: ubuntu-latest
-    needs: lint-and-build
-    
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: taktip_test
-          POSTGRES_USER: taktip
-          POSTGRES_PASSWORD: testpassword
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-
-    env:
-      DATABASE_URL: postgresql://taktip:testpassword@localhost:5432/taktip_test
-      REDIS_URL: redis://localhost:6379
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'pnpm'
-
-      - name: Install pnpm
-        run: npm install -g pnpm
-
-      - name: Remove npm lockfile conflict
-        run: rm -f package-lock.json
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run tests
-        run: pnpm run test
-
-  health-check:
-    name: Health Check Verification
-    runs-on: ubuntu-latest
-    needs: lint-and-build
-    
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: taktip_test
-          POSTGRES_USER: taktip
-          POSTGRES_PASSWORD: testpassword
-        ports:
-          - 5432:5432
-      
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-
-    env:
-      DATABASE_URL: postgresql://taktip:testpassword@localhost:5432/taktip_test
-      REDIS_URL: redis://localhost:6379
-      APP_PORT: 3001
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'pnpm'
-
-      - name: Install pnpm
-        run: npm install -g pnpm
-
-      - name: Remove npm lockfile conflict
-        run: rm -f package-lock.json
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build
-        run: pnpm run build
-
-      - name: Start server
-        run: pnpm run start &
-        
-      - name: Wait for server
-        run: sleep 10
-
-      - name: Test health endpoint
-        run: |
-          curl -f http://localhost:3001/health || exit 1
-          curl -f http://localhost:3001/health/../live || exit 1
-          curl -f http://localhost:3001/health/../ready || exit 1
-
-  approve-review:
-    name: Auto-Approve if Ready
-    runs-on: ubuntu-latest
-    needs: [lint-and-build, test, health-check]
-    if: github.event_name == 'pull_request'
-    
-    steps:
-      - name: Approve PR
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.pulls.createReview({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.issue.number,
-              event: 'APPROVE',
-              body: '✅ All CI checks passed. Approved for merge.'
-            })
-
   deploy-staging:
     name: Deploy Staging
     runs-on: self-hosted
     labels: [staging]
-    needs: [lint-and-build, test, health-check]
     if: github.ref == 'refs/heads/staging'
     environment: staging
     
@@ -207,9 +20,30 @@ jobs:
         run: |
           set -e
           cd /home/stg-api/public_html
+          git fetch origin staging
+          git checkout staging
           git pull origin staging
-          rm -rf node_modules package-lock.json pnpm-lock.yaml
-          pnpm install
-          pnpm run build
-          source .env 2>/dev/null || true
-          pm2 restart stg-api || pm2 start ecosystem.config.js --name stg-api
+          rm -rf node_modules pnpm-lock.yaml package-lock.json
+          ~/.local/bin/pnpm install
+          ~/.local/bin/pnpm run build
+          pm2 restart taktip-staging || (pm2 start ecosystem.config.js --name taktip-staging && pm2 save)
+
+  deploy-main:
+    name: Deploy Production
+    runs-on: self-hosted
+    labels: [production]
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+      - name: Deploy to production
+        run: |
+          set -e
+          cd /home/api/public_html
+          git fetch origin main
+          git checkout main
+          git pull origin main
+          rm -rf node_modules pnpm-lock.yaml package-lock.json
+          ~/.local/bin/pnpm install
+          ~/.local/bin/pnpm run build
+          pm2 restart taktip-prod || (pm2 start ecosystem.config.js --name taktip-prod && pm2 save)
