@@ -15,7 +15,7 @@ class HealthResponse {
   @ApiProperty({ example: 3600 })
   uptime: number;
 
-  @ApiProperty({ type: [Object] })
+  @ApiProperty({ type: HealthServiceStatus, description: 'Status of dependent services' })
   services: {
     database: HealthServiceStatus;
     redis: HealthServiceStatus;
