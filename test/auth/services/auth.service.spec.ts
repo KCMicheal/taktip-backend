@@ -62,6 +62,7 @@ describe('AuthService', () => {
             find: jest.fn(),
             create: jest.fn(),
             save: jest.fn(),
+            update: jest.fn(),
             createQueryBuilder: jest.fn(() => ({
               leftJoinAndSelect: jest.fn().mockReturnThis(),
               where: jest.fn().mockReturnThis(),

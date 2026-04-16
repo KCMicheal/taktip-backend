@@ -155,7 +155,7 @@ export class AuthController {
     @CurrentUser() user: UserResponse,
   ) {
     return this.authService.changePassword(
-      user.id,
+      user.sub,
       dto.currentPassword,
       dto.newPassword,
       user.role,
@@ -193,6 +193,6 @@ export class AuthController {
   })
   @ApiResponse({ status: 401, description: 'Unauthorized', type: ErrorResponseDto })
   async logoutAll(@CurrentUser() user: UserResponse) {
-    return this.authService.logoutAll(user.id);
+    return this.authService.logoutAll(user.sub);
   }
 }

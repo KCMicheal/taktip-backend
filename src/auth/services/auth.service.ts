@@ -4,6 +4,7 @@ import {
   BadRequestException,
   NotFoundException,
   UnauthorizedException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -24,7 +25,7 @@ import { TokenService, TokenPair } from './token.service';
 import { Role } from '../enums/role.enum';
 
 export interface UserResponse {
-  id: string;
+  sub: string;
   email: string;
   phone: string | null;
   role: Role;
@@ -33,6 +34,7 @@ export interface UserResponse {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private readonly saltRounds = 10;
   private readonly resetTokenExpiryHours = 1;
 
@@ -170,10 +172,11 @@ export class AuthService {
 
   /**
    * Transform user entity to safe response object
+   * Note: 'sub' is used instead of 'id' because JWT tokens use 'sub' as the subject identifier
    */
   private toUserResponse(user: User): UserResponse {
     return {
-      id: user.id,
+      sub: user.id,
       email: user.email,
       phone: user.phone,
       role: user.role,
@@ -330,9 +333,14 @@ export class AuthService {
 
     await this.passwordResetRepository.save(passwordReset);
 
-    // Send password reset email
-    const userName = user.email.split('@')[0];
-    await this.mailService.sendPasswordResetEmail(user.email, resetToken, userName);
+    // Send password reset email (catch errors to prevent user enumeration)
+    try {
+      const userName = user.email.split('@')[0];
+      await this.mailService.sendPasswordResetEmail(user.email, resetToken, userName);
+    } catch (error) {
+      // Log the error but don't reveal it to the caller
+      this.logger.error(`Failed to send password reset email to ${user.email}`, error);
+    }
 
     return {
       message: 'If an account exists with this email, a password reset link has been sent.',
@@ -376,9 +384,11 @@ export class AuthService {
     validToken.user.passwordHash = passwordHash;
     await this.userRepository.save(validToken.user);
 
-    // Mark token as used
-    validToken.usedAt = new Date();
-    await this.passwordResetRepository.save(validToken);
+    // Invalidate ALL reset tokens for this user (security: prevent older tokens from working)
+    await this.passwordResetRepository.update(
+      { userId: validToken.userId },
+      { usedAt: new Date() },
+    );
 
     // Revoke all refresh tokens to force re-login
     await this.tokenService.revokeAllUserTokens(validToken.userId);
