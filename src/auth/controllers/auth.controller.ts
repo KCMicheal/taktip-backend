@@ -19,6 +19,9 @@ import {
   ResendOtpDto,
   LoginDto,
   RefreshTokenDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
+  ChangePasswordDto,
   RegisterMerchantResponseDto,
   VerifyOtpResponseDto,
   ResendOtpResponseDto,
@@ -26,6 +29,9 @@ import {
   RefreshTokenResponseDto,
   LogoutResponseDto,
   LogoutAllResponseDto,
+  ForgotPasswordResponseDto,
+  ResetPasswordResponseDto,
+  ChangePasswordResponseDto,
   ErrorResponseDto,
 } from '../dto';
 
@@ -104,6 +110,58 @@ export class AuthController {
     return this.authService.refreshTokens(dto);
   }
 
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @Public()
+  @ApiOperation({ summary: 'Request password reset email' })
+  @ApiResponse({
+    status: 200,
+    description: 'Password reset email sent if account exists',
+    type: ForgotPasswordResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Invalid email or role', type: ErrorResponseDto })
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto.email, dto.role);
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @Public()
+  @ApiOperation({ summary: 'Reset password using token from email' })
+  @ApiResponse({
+    status: 200,
+    description: 'Password has been reset successfully',
+    type: ResetPasswordResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Invalid or expired token', type: ErrorResponseDto })
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto.token, dto.newPassword);
+  }
+
+  @Post('change-password')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Change password for authenticated user' })
+  @ApiResponse({
+    status: 200,
+    description: 'Password changed successfully',
+    type: ChangePasswordResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Invalid password format', type: ErrorResponseDto })
+  @ApiResponse({ status: 401, description: 'Current password is incorrect', type: ErrorResponseDto })
+  async changePassword(
+    @Body() dto: ChangePasswordDto,
+    @CurrentUser() user: UserResponse,
+  ) {
+    return this.authService.changePassword(
+      user.sub,
+      dto.currentPassword,
+      dto.newPassword,
+      user.role,
+    );
+  }
+
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
@@ -135,6 +193,6 @@ export class AuthController {
   })
   @ApiResponse({ status: 401, description: 'Unauthorized', type: ErrorResponseDto })
   async logoutAll(@CurrentUser() user: UserResponse) {
-    return this.authService.logoutAll(user.id);
+    return this.authService.logoutAll(user.sub);
   }
 }

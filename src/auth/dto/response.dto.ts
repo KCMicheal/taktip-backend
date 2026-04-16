@@ -73,3 +73,18 @@ export class LogoutAllResponseDto {
   @ApiProperty({ example: 'Logged out from all devices' })
   message: string;
 }
+
+export class ForgotPasswordResponseDto {
+  @ApiProperty({ example: 'If an account exists with this email, a password reset link has been sent.' })
+  message: string;
+}
+
+export class ResetPasswordResponseDto {
+  @ApiProperty({ example: 'Password has been reset successfully. Please log in with your new password.' })
+  message: string;
+}
+
+export class ChangePasswordResponseDto {
+  @ApiProperty({ example: 'Password changed successfully.' })
+  message: string;
+}

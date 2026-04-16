@@ -4,21 +4,32 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { ConflictException, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 import { AuthService } from '@/auth/services/auth.service';
 import { OtpService } from '@/auth/services/otp.service';
 import { MailService } from '@/auth/services/mail.service';
 import { TokenService } from '@/auth/services/token.service';
 import { User } from '@/auth/entities/user.entity';
+import { PasswordReset } from '@/auth/entities/password-reset.entity';
 import { Role } from '@/auth/enums/role.enum';
 
 jest.mock('bcrypt');
 jest.mock('jose');
+jest.mock('crypto', () => {
+  const original = jest.requireActual('crypto');
+  return {
+    ...original,
+    randomUUID: jest.fn(() => 'mock-uuid-1234'),
+  } as { [key: string]: unknown };
+});
 
 describe('AuthService', () => {
   let authService: AuthService;
   let userRepository: jest.Mocked<Repository<User>>;
+  let passwordResetRepository: jest.Mocked<Repository<PasswordReset>>;
   let otpService: jest.Mocked<OtpService>;
   let mailService: jest.Mocked<MailService>;
+  let tokenService: jest.Mocked<TokenService>;
 
   const mockUser: Partial<User> = {
     id: 'test-uuid',
@@ -46,6 +57,20 @@ describe('AuthService', () => {
           },
         },
         {
+          provide: getRepositoryToken(PasswordReset),
+          useValue: {
+            find: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            update: jest.fn(),
+            createQueryBuilder: jest.fn(() => ({
+              leftJoinAndSelect: jest.fn().mockReturnThis(),
+              where: jest.fn().mockReturnThis(),
+              getMany: jest.fn(),
+            })),
+          },
+        },
+        {
           provide: OtpService,
           useValue: {
             generateOtp: jest.fn(),
@@ -60,6 +85,7 @@ describe('AuthService', () => {
           useValue: {
             sendOtpEmail: jest.fn(),
             sendWelcomeEmail: jest.fn(),
+            sendPasswordResetEmail: jest.fn(),
           },
         },
         {
@@ -83,8 +109,10 @@ describe('AuthService', () => {
 
     authService = module.get<AuthService>(AuthService);
     userRepository = module.get(getRepositoryToken(User));
+    passwordResetRepository = module.get(getRepositoryToken(PasswordReset));
     otpService = module.get(OtpService);
     mailService = module.get(MailService);
+    tokenService = module.get(TokenService);
   });
 
   afterEach(() => {
@@ -224,6 +252,167 @@ describe('AuthService', () => {
 
       await expect(authService.resendOtp(resendDto)).rejects.toThrow(BadRequestException);
       await expect(authService.resendOtp(resendDto)).rejects.toThrow('Email already verified');
+    });
+  });
+
+  describe('forgotPassword', () => {
+    it('should request password reset for existing user', async () => {
+      const existingUser = { ...mockUser, isEmailVerified: true } as User;
+      userRepository.findOne.mockResolvedValue(existingUser);
+      passwordResetRepository.create.mockReturnValue({} as PasswordReset);
+      passwordResetRepository.save.mockResolvedValue({} as PasswordReset);
+      mailService.sendPasswordResetEmail.mockResolvedValue(undefined);
+
+      const result = await authService.forgotPassword('test@example.com', Role.MERCHANT);
+
+      expect(result.message).toBe('If an account exists with this email, a password reset link has been sent.');
+      expect(userRepository.findOne).toHaveBeenCalledWith({ where: { email: 'test@example.com', role: Role.MERCHANT } });
+      expect(passwordResetRepository.create).toHaveBeenCalled();
+      expect(passwordResetRepository.save).toHaveBeenCalled();
+      expect(mailService.sendPasswordResetEmail).toHaveBeenCalledWith('test@example.com', 'mock-uuid-1234', 'test');
+    });
+
+    it('should always return success even if user not found (security)', async () => {
+      userRepository.findOne.mockResolvedValue(null);
+
+      const result = await authService.forgotPassword('nonexistent@example.com', Role.MERCHANT);
+
+      expect(result.message).toBe('If an account exists with this email, a password reset link has been sent.');
+      expect(passwordResetRepository.create).not.toHaveBeenCalled();
+      expect(mailService.sendPasswordResetEmail).not.toHaveBeenCalled();
+    });
+
+    it('should return success if user has invalid role', async () => {
+      const userWithInvalidRole = { ...mockUser, role: null as unknown as Role } as User;
+      userRepository.findOne.mockResolvedValue(userWithInvalidRole);
+
+      const result = await authService.forgotPassword('test@example.com', Role.MERCHANT);
+
+      expect(result.message).toBe('If an account exists with this email, a password reset link has been sent.');
+    });
+  });
+
+  describe('resetPassword', () => {
+    const createMockQueryBuilder = (tokens: Partial<PasswordReset>[]) => ({
+      leftJoinAndSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      getMany: jest.fn().mockResolvedValue(tokens),
+    });
+
+    beforeEach(() => {
+      // Reset the mock for createQueryBuilder
+      (passwordResetRepository.createQueryBuilder as jest.Mock) = jest.fn();
+    });
+
+    it('should reset password with valid token', async () => {
+      const validToken: Partial<PasswordReset> = {
+        id: 'reset-token-id',
+        userId: 'test-uuid',
+        tokenHash: 'hashedToken',
+        expiresAt: new Date(Date.now() + 3600000), // 1 hour from now
+        usedAt: null,
+        user: mockUser as User,
+      };
+
+      (passwordResetRepository.createQueryBuilder as jest.Mock).mockReturnValue(createMockQueryBuilder([validToken]));
+      userRepository.save.mockResolvedValue(mockUser as User);
+      passwordResetRepository.save.mockResolvedValue({ ...validToken, usedAt: new Date() } as PasswordReset);
+      tokenService.revokeAllUserTokens.mockResolvedValue(1);
+
+      // Mock bcrypt.compare to return true for the token
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+      const result = await authService.resetPassword('valid-token', 'NewSecurePass123');
+
+      expect(result.message).toBe('Password has been reset successfully. Please log in with your new password.');
+      expect(passwordResetRepository.createQueryBuilder).toHaveBeenCalled();
+      expect(userRepository.save).toHaveBeenCalled();
+      expect(tokenService.revokeAllUserTokens).toHaveBeenCalledWith('test-uuid');
+    });
+
+    it('should reject expired token', async () => {
+      const expiredToken: Partial<PasswordReset> = {
+        id: 'reset-token-id',
+        userId: 'test-uuid',
+        tokenHash: 'hashedToken',
+        expiresAt: new Date(Date.now() - 1000), // expired
+        usedAt: null,
+        user: mockUser as User,
+      };
+
+      (passwordResetRepository.createQueryBuilder as jest.Mock).mockReturnValue(createMockQueryBuilder([expiredToken]));
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+      await expect(authService.resetPassword('expired-token', 'NewSecurePass123')).rejects.toThrow(BadRequestException);
+      await expect(authService.resetPassword('expired-token', 'NewSecurePass123')).rejects.toThrow('Invalid or expired reset token');
+    });
+
+    it('should reject used token', async () => {
+      // Token is considered used because it's not returned by the query (usedAt IS NULL filter)
+      (passwordResetRepository.createQueryBuilder as jest.Mock).mockReturnValue(createMockQueryBuilder([]));
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+      await expect(authService.resetPassword('used-token', 'NewSecurePass123')).rejects.toThrow(BadRequestException);
+      await expect(authService.resetPassword('used-token', 'NewSecurePass123')).rejects.toThrow('Invalid or expired reset token');
+    });
+
+    it('should reject invalid token', async () => {
+      (passwordResetRepository.createQueryBuilder as jest.Mock).mockReturnValue(createMockQueryBuilder([]));
+      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+
+      await expect(authService.resetPassword('invalid-token', 'NewSecurePass123')).rejects.toThrow(BadRequestException);
+      await expect(authService.resetPassword('invalid-token', 'NewSecurePass123')).rejects.toThrow('Invalid or expired reset token');
+    });
+  });
+
+  describe('changePassword', () => {
+    it('should change password with valid current password', async () => {
+      userRepository.findOne.mockResolvedValue(mockUser as User);
+      userRepository.save.mockResolvedValue(mockUser as User);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+      (bcrypt.hash as jest.Mock).mockResolvedValue('newHashedPassword');
+
+      const result = await authService.changePassword(
+        'test-uuid',
+        'CurrentPass123',
+        'NewSecurePass123',
+        Role.MERCHANT,
+      );
+
+      expect(result.message).toBe('Password changed successfully.');
+      expect(userRepository.save).toHaveBeenCalled();
+    });
+
+    it('should reject wrong current password', async () => {
+      userRepository.findOne.mockResolvedValue(mockUser as User);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+
+      await expect(
+        authService.changePassword('test-uuid', 'WrongPassword', 'NewSecurePass123', Role.MERCHANT),
+      ).rejects.toThrow(UnauthorizedException);
+      await expect(
+        authService.changePassword('test-uuid', 'WrongPassword', 'NewSecurePass123', Role.MERCHANT),
+      ).rejects.toThrow('Current password is incorrect');
+    });
+
+    it('should throw NotFoundException if user not found', async () => {
+      userRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        authService.changePassword('non-existent-id', 'CurrentPass123', 'NewSecurePass123', Role.MERCHANT),
+      ).rejects.toThrow(NotFoundException);
+      await expect(
+        authService.changePassword('non-existent-id', 'CurrentPass123', 'NewSecurePass123', Role.MERCHANT),
+      ).rejects.toThrow('User not found');
+    });
+
+    it('should throw BadRequestException if role is invalid', async () => {
+      await expect(
+        authService.changePassword('test-uuid', 'CurrentPass123', 'NewSecurePass123', null as unknown as Role),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        authService.changePassword('test-uuid', 'CurrentPass123', 'NewSecurePass123', null as unknown as Role),
+      ).rejects.toThrow('Invalid user role');
     });
   });
 });
