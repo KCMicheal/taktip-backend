@@ -11,12 +11,13 @@ import { TokenService } from './services/token.service';
 import { AuthController } from './controllers/auth.controller';
 import { User } from './entities/user.entity';
 import { RefreshToken } from './entities/refresh-token.entity';
+import { PasswordReset } from './entities/password-reset.entity';
 import { jwtAuthGuard } from './guards/jwt-auth.guard';
 import { rolesGuard } from './guards/roles.guard';
 
 /**
  * Auth Module - Provides JWT authentication and authorization functionality
- * 
+ *
  * Features:
  * - JWT token generation and verification using Ed25519 keys
  * - Public endpoint marking via @Public() decorator
@@ -24,11 +25,12 @@ import { rolesGuard } from './guards/roles.guard';
  * - Current user extraction via @CurrentUser() decorator
  * - Merchant registration with email OTP verification
  * - Login with refresh token support
+ * - Password reset functionality (forgot, reset, change password)
  */
 @Global()
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, RefreshToken]),
+    TypeOrmModule.forFeature([User, RefreshToken, PasswordReset]),
     ConfigModule,
   ],
   controllers: [AuthController],
