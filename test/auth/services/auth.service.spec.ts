@@ -33,6 +33,8 @@ describe('AuthService', () => {
 
   const mockUser: Partial<User> = {
     id: 'test-uuid',
+    firstName: 'John',
+    lastName: 'Doe',
     email: 'test@example.com',
     passwordHash: 'hashedPassword',
     role: Role.MERCHANT,
@@ -121,6 +123,8 @@ describe('AuthService', () => {
 
   describe('registerMerchant', () => {
     const registerDto = {
+      firstName: 'John',
+      lastName: 'Doe',
       email: 'merchant@example.com',
       password: 'SecurePass123',
       businessName: 'Test Restaurant',
