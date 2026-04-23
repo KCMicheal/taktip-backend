@@ -116,6 +116,25 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
 
+  // ========== CORS Configuration ==========
+  // Get allowed origins from environment variable
+  // In development: http://localhost:5173 (Vite), http://localhost:3000 (React)
+  // In staging/production: Set ALLOWED_ORIGINS env var with your deployed URLs
+  const allowedOrigins = configService.get<string>('ALLOWED_ORIGINS') ?? 'http://localhost:5173,http://localhost:3000';
+  
+  // Convert comma-separated string to array
+  const originsArray = allowedOrigins.split(',').map(origin => origin.trim());
+  
+  // Enable CORS with configured origins
+  app.enableCors({
+    origin: originsArray,
+    credentials: true, // Allow cookies/auth headers
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  });
+
+  console.log(`🌐 CORS enabled for origins: ${originsArray.join(', ')}`);
+
   // API versioning configuration
   const apiVersion = configService.get<string>('API_VERSION', 'v1') ?? 'v1';
 
