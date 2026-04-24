@@ -1,10 +1,8 @@
 // Role enum for authorization
-// Based on TakTip business model:
-// - MERCHANT: Business owners who receive tips on behalf of staff
-// - STAFF: Employees who receive tips via merchant's QR code
-// - ADMIN: Platform administrators
+// Note: Numeric values match database enum for compatibility
 export enum Role {
-  MERCHANT = 'MERCHANT',
-  STAFF = 'STAFF',
-  ADMIN = 'ADMIN',
+  CUSTOMER = 1, // Optional account - tip staff, fund account, view history. CANNOT receive tips
+  MERCHANT = 2, // Business owners
+  STAFF = 3, // Employees
+  ADMIN = 4, // Platform administrators
 }

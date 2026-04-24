@@ -6,6 +6,7 @@ import { Reflector } from '@nestjs/core';
 import { JwtService } from './services/jwt.service';
 import { OtpService } from './services/otp.service';
 import { MailService } from './services/mail.service';
+import { EmailFallbackService } from './services/email-fallback.service';
 import { AuthService } from './services/auth.service';
 import { TokenService } from './services/token.service';
 import { AuthController } from './controllers/auth.controller';
@@ -35,18 +36,16 @@ import { rolesGuard } from './guards/roles.guard';
   ],
   controllers: [AuthController],
   providers: [
-    // JWT Services
+    // JWT Services - single instance for both custom JwtService and NestJwtService alias
+    JwtService,
     {
       provide: NestJwtService,
-      useFactory: (): NestJwtService => {
-        const service = new JwtService();
-        return service as unknown as NestJwtService;
-      },
+      useExisting: JwtService,
     },
-    JwtService,
     // Auth Services
     OtpService,
     MailService,
+    EmailFallbackService,
     TokenService,
     AuthService,
     // Guards
