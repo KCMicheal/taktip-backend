@@ -3,6 +3,22 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class RegisterMerchantDto {
   @ApiProperty({
+    description: 'Merchant first name',
+    example: 'John',
+  })
+  @IsString()
+  @IsNotEmpty({ message: 'First name is required' })
+  firstName!: string;
+
+  @ApiProperty({
+    description: 'Merchant last name',
+    example: 'Doe',
+  })
+  @IsString()
+  @IsNotEmpty({ message: 'Last name is required' })
+  lastName!: string;
+
+  @ApiProperty({
     description: 'Merchant business email address',
     example: 'merchant@restaurant.com',
   })

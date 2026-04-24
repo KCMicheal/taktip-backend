@@ -16,14 +16,19 @@ export class User {
   email: string;
 
   @Column({ type: 'varchar', nullable: true, default: null })
+  firstName: string | null;
+
+  @Column({ type: 'varchar', nullable: true, default: null })
+  lastName: string | null;
+
+  @Column({ type: 'varchar', nullable: true, default: null })
   phone: string | null;
 
   @Column({ type: 'varchar' })
   passwordHash: string;
 
   @Column({
-    type: 'enum',
-    enum: Role,
+    type: 'int',
     default: Role.MERCHANT,
   })
   role: Role;
