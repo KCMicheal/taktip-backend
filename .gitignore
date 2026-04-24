@@ -24,6 +24,3 @@ npm-debug.log*
 # IDEs
 .vscode/
 .idea/
-
-# Test Coverage
-coverage/

@@ -6,19 +6,17 @@ import { Reflector } from '@nestjs/core';
 import { JwtService } from './services/jwt.service';
 import { OtpService } from './services/otp.service';
 import { MailService } from './services/mail.service';
-import { EmailFallbackService } from './services/email-fallback.service';
 import { AuthService } from './services/auth.service';
 import { TokenService } from './services/token.service';
 import { AuthController } from './controllers/auth.controller';
 import { User } from './entities/user.entity';
 import { RefreshToken } from './entities/refresh-token.entity';
-import { PasswordReset } from './entities/password-reset.entity';
 import { jwtAuthGuard } from './guards/jwt-auth.guard';
 import { rolesGuard } from './guards/roles.guard';
 
 /**
  * Auth Module - Provides JWT authentication and authorization functionality
- *
+ * 
  * Features:
  * - JWT token generation and verification using Ed25519 keys
  * - Public endpoint marking via @Public() decorator
@@ -26,26 +24,27 @@ import { rolesGuard } from './guards/roles.guard';
  * - Current user extraction via @CurrentUser() decorator
  * - Merchant registration with email OTP verification
  * - Login with refresh token support
- * - Password reset functionality (forgot, reset, change password)
  */
 @Global()
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, RefreshToken, PasswordReset]),
+    TypeOrmModule.forFeature([User, RefreshToken]),
     ConfigModule,
   ],
   controllers: [AuthController],
   providers: [
-    // JWT Services - single instance for both custom JwtService and NestJwtService alias
-    JwtService,
+    // JWT Services
     {
       provide: NestJwtService,
-      useExisting: JwtService,
+      useFactory: (): NestJwtService => {
+        const service = new JwtService();
+        return service as unknown as NestJwtService;
+      },
     },
+    JwtService,
     // Auth Services
     OtpService,
     MailService,
-    EmailFallbackService,
     TokenService,
     AuthService,
     // Guards

@@ -3,11 +3,9 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { parse } from 'pg-connection-string';
-import { APP_GUARD, APP_INTERCEPTOR, APP_FILTER } from '@nestjs/core';
+import { APP_GUARD } from '@nestjs/core';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
-import { ResponseInterceptor } from './common/interceptors/response.interceptor';
-import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 
 @Module({
   imports: [
@@ -73,16 +71,6 @@ import { GlobalExceptionFilter } from './common/filters/global-exception.filter'
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
-    },
-    // Apply response interceptor globally
-    {
-      provide: APP_INTERCEPTOR,
-      useClass: ResponseInterceptor,
-    },
-    // Apply exception filter globally
-    {
-      provide: APP_FILTER,
-      useClass: GlobalExceptionFilter,
     },
   ],
 })
