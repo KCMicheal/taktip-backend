@@ -1,32 +1,17 @@
 import { Controller, Get } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiProduces } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { DataSource } from 'typeorm';
 import Redis from 'ioredis';
-import {
-  HealthResponse,
-  LivenessResponse,
-  ReadinessResponse,
-  NotReadyResponse,
-} from './dto';
 
 @ApiTags('health')
 @Controller('health')
-@ApiProduces('application/json')
 export class HealthController {
   constructor(private readonly dataSource: DataSource) {}
 
   @Get()
   @ApiOperation({ summary: 'Health check endpoint' })
-  @ApiResponse({
-    status: 200,
-    description: 'Service is healthy',
-    type: HealthResponse,
-  })
-  @ApiResponse({
-    status: 503,
-    description: 'Service is unhealthy',
-    type: HealthResponse,
-  })
+  @ApiResponse({ status: 200, description: 'Service is healthy' })
+  @ApiResponse({ status: 503, description: 'Service is unhealthy' })
   async check() {
     const health = {
       status: 'ok',
@@ -49,30 +34,18 @@ export class HealthController {
 
   @Get('live')
   @ApiOperation({ summary: 'Liveness probe' })
-  @ApiResponse({
-    status: 200,
-    description: 'Service is alive',
-    type: LivenessResponse,
-  })
+  @ApiResponse({ status: 200, description: 'Service is alive' })
   liveness() {
     return { status: 'alive', timestamp: new Date().toISOString() };
   }
 
   @Get('ready')
   @ApiOperation({ summary: 'Readiness probe' })
-  @ApiResponse({
-    status: 200,
-    description: 'Service is ready',
-    type: ReadinessResponse,
-  })
-  @ApiResponse({
-    status: 503,
-    description: 'Service is not ready',
-    type: NotReadyResponse,
-  })
+  @ApiResponse({ status: 200, description: 'Service is ready' })
+  @ApiResponse({ status: 503, description: 'Service is not ready' })
   async readiness() {
     const dbHealthy = (await this.checkDatabase()).status === 'up';
-
+    
     if (!dbHealthy) {
       return { status: 'not_ready', reason: 'Database not connected' };
     }
