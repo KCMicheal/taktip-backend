@@ -1,0 +1,68 @@
+import {
+  IsString,
+  IsEmail,
+  IsOptional,
+  IsNotEmpty,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+export class InviteStaffDto {
+  @ApiProperty({
+    description: 'Email address of the staff to invite',
+    example: 'staff@example.com',
+  })
+  @IsEmail()
+  @IsNotEmpty()
+  @MaxLength(255)
+  email: string;
+
+  @ApiPropertyOptional({
+    description: 'Role within the business (default: STAFF)',
+    example: 'STAFF',
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(3)
+  @MaxLength(20)
+  role?: string;
+}
+
+export class AcceptInviteDto {
+  @ApiProperty({
+    description: 'Invite token from email',
+    example: 'abc123xyz...',
+  })
+  @IsString()
+  @IsNotEmpty()
+  token: string;
+
+  @ApiProperty({
+    description: 'New user password',
+    example: 'SecurePass123!',
+  })
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(8)
+  @MaxLength(100)
+  password: string;
+
+  @ApiProperty({
+    description: 'User first name',
+    example: 'John',
+  })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(50)
+  firstName: string;
+
+  @ApiProperty({
+    description: 'User last name',
+    example: 'Doe',
+  })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(50)
+  lastName: string;
+}

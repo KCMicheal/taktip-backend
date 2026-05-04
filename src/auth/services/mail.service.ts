@@ -138,9 +138,9 @@ export class MailService {
     }
   }
 
-/**
-    * Send welcome email after successful verification
-    */
+  /**
+   * Send welcome email after successful verification
+   */
   async sendWelcomeEmail(email: string, businessName: string): Promise<void> {
     const senderEmail = this.configService.get<string>('MAILJET_SENDER_EMAIL', 'noreply@taktip.io');
     const senderName = this.configService.get<string>('MAILJET_SENDER_NAME', 'TakTip');
@@ -186,6 +186,64 @@ export class MailService {
       } catch (fallbackError) {
         this.logger.error(`All email services failed for ${email}:`, fallbackError);
         // Don't throw - welcome email failure shouldn't block registration
+      }
+    }
+  }
+
+  /**
+   * Send staff invite email with invite link
+   */
+  async sendStaffInviteEmail(
+    email: string,
+    merchantName: string,
+    inviteLink: string,
+  ): Promise<void> {
+    const senderEmail = this.configService.get<string>('MAILJET_SENDER_EMAIL', 'noreply@taktip.io');
+    const senderName = this.configService.get<string>('MAILJET_SENDER_NAME', 'TakTip');
+
+    const emailContent = {
+      to: email,
+      toName: email.split('@')[0], // Use email username as name
+      subject: `You're invited to join ${merchantName} on TakTip`,
+      text: `You've been invited to join ${merchantName} on TakTip. Click the link to accept: ${inviteLink}. This invite expires in 24 hours.`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">You're invited to join ${merchantName}!</h2>
+          <p>Hello,</p>
+          <p>You've been invited to join <strong>${merchantName}</strong> on TakTip as a staff member.</p>
+          <p>Click the button below to accept the invitation and set up your account:</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${inviteLink}" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-size: 16px;">Accept Invitation</a>
+          </div>
+          <p style="color: #666; font-size: 14px;">This invite expires in <strong>24 hours</strong>.</p>
+          <p style="color: #666; font-size: 14px;">If you didn't expect this invitation, please ignore this email.</p>
+          <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+          <p style="color: #999; font-size: 12px;">TakTip - Digital Tipping Platform</p>
+        </div>
+      `,
+    };
+
+    try {
+      await this.sendEmail([
+        {
+          From: { Email: senderEmail, Name: senderName },
+          To: [{ Email: email, Name: emailContent.toName }],
+          Subject: emailContent.subject,
+          TextPart: emailContent.text,
+          HTMLPart: emailContent.html,
+        },
+      ]);
+
+      this.logger.log(`Staff invite email sent to ${email} via MailJet`);
+    } catch (mailjetError) {
+      this.logger.warn(`MailJet failed for ${email}, using fallback:`, mailjetError);
+
+      try {
+        await this.emailFallbackService.sendEmail(emailContent);
+        this.logger.log(`Staff invite email sent to ${email} via fallback (nodemailer)`);
+      } catch (fallbackError) {
+        this.logger.error(`All email services failed for ${email}:`, fallbackError);
+        throw fallbackError;
       }
     }
   }

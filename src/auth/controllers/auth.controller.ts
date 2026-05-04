@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from '../services/auth.service';
+import { InviteService } from '../../merchant/services/invite.service';
 import { UserResponse } from '../services/auth.service';
 import { Public } from '../decorators/public.decorator';
 import { CurrentUser } from '../decorators/current-user.decorator';
@@ -34,11 +35,15 @@ import {
   ChangePasswordResponseDto,
   ErrorResponseDto,
 } from '../dto';
+import { AcceptInviteDto } from '../../merchant/dto/invite.dto';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly inviteService: InviteService,
+  ) {}
 
   @Post('register/merchant')
   @HttpCode(HttpStatus.CREATED)
@@ -52,6 +57,28 @@ export class AuthController {
   @ApiResponse({ status: 409, description: 'Email already registered', type: ErrorResponseDto })
   async registerMerchant(@Body() dto: RegisterMerchantDto) {
     return this.authService.registerMerchant(dto);
+  }
+
+  @Post('register/staff')
+  @HttpCode(HttpStatus.CREATED)
+  @Public()
+  @ApiOperation({ summary: 'Register as staff using invite token' })
+  @ApiResponse({
+    status: 201,
+    description: 'Staff registration successful',
+  })
+  @ApiResponse({ status: 400, description: 'Invalid or expired invite token', type: ErrorResponseDto })
+  @ApiResponse({ status: 404, description: 'Invalid invite token', type: ErrorResponseDto })
+  async registerStaff(@Body() dto: AcceptInviteDto) {
+    const result = await this.inviteService.acceptInvite(dto);
+    return {
+      status: 'success',
+      data: {
+        user: result.user,
+        merchant: result.merchant,
+      },
+      message: 'Staff registration successful. You can now log in.',
+    };
   }
 
   @Post('verify-otp')

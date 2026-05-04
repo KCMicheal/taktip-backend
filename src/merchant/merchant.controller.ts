@@ -1,9 +1,11 @@
-import { Controller, Get, Put, Param, Body, UseGuards, ParseUUIDPipe, ForbiddenException } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam, ApiResponse } from '@nestjs/swagger';
+import { Controller, Get, Put, Post, Param, Body, UseGuards, ParseUUIDPipe, ForbiddenException } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { MerchantService } from './merchant.service';
+import { InviteService } from './services/invite.service';
 import { BusinessType } from '../common/enums/business-type.enum';
+import { InviteStaffDto } from './dto/invite.dto';
 
 class UpdateMerchantDto {
   name?: string;
@@ -20,7 +22,10 @@ class UpdateMerchantDto {
 @UseGuards(JwtAuthGuard)
 @Controller('merchant')
 export class MerchantController {
-  constructor(private readonly merchantService: MerchantService) {}
+  constructor(
+    private readonly merchantService: MerchantService,
+    private readonly inviteService: InviteService,
+  ) {}
 
   @Get('me')
   @ApiOperation({ summary: 'Get current user merchants' })
@@ -76,5 +81,51 @@ export class MerchantController {
   async getMerchantsByOwner(@Param('ownerId', ParseUUIDPipe) ownerId: string) {
     const merchants = await this.merchantService.getMerchantsByOwnerId(ownerId);
     return { status: 'success', data: merchants };
+  }
+
+  @Post(':merchantId/invite')
+  @ApiOperation({ summary: 'Invite a staff member to join the merchant' })
+  @ApiParam({ name: 'merchantId', description: 'Merchant UUID' })
+  @ApiBody({ type: InviteStaffDto })
+  @ApiResponse({ status: 201, description: 'Invite sent successfully' })
+  @ApiResponse({ status: 403, description: 'Not authorized to invite staff for this merchant' })
+  @ApiResponse({ status: 404, description: 'Merchant not found' })
+  async inviteStaff(
+    @Param('merchantId', ParseUUIDPipe) merchantId: string,
+    @Body() dto: InviteStaffDto,
+    @CurrentUser() user: { sub: string },
+  ) {
+    // Get the merchant to check ownership
+    const merchant = await this.merchantService.getMerchantById(merchantId);
+    
+    // Check if the current user owns this merchant or is admin
+    if (merchant.ownerId !== user.sub) {
+      throw new ForbiddenException('Not authorized to invite staff for this merchant');
+    }
+
+    const invite = await this.inviteService.inviteStaff(merchantId, dto, user.sub);
+    return { status: 'success', data: invite, message: 'Invite sent successfully' };
+  }
+
+  @Get(':merchantId/invites')
+  @ApiOperation({ summary: 'Get all invites for a merchant' })
+  @ApiParam({ name: 'merchantId', description: 'Merchant UUID' })
+  @ApiResponse({ status: 200, description: 'List of invites' })
+  @ApiResponse({ status: 403, description: 'Not authorized to view invites for this merchant' })
+  @ApiResponse({ status: 404, description: 'Merchant not found' })
+  async getMerchantInvites(
+    @Param('merchantId', ParseUUIDPipe) merchantId: string,
+    @CurrentUser() user: { sub: string },
+  ) {
+    // Get the merchant to check ownership
+    const merchant = await this.merchantService.getMerchantById(merchantId);
+    
+    // Check if the current user owns this merchant or is admin
+    if (merchant.ownerId !== user.sub) {
+      throw new ForbiddenException('Not authorized to view invites for this merchant');
+    }
+
+    const invites = await this.inviteService.getMerchantInvites(merchantId, user.sub);
+    return { status: 'success', data: invites };
   }
 }
