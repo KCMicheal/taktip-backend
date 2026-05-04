@@ -309,8 +309,10 @@ export class AuthService {
    * Always returns success to prevent user enumeration attacks
    */
   async forgotPassword(email: string, role: Role): Promise<{ message: string }> {
-    // Validate role is a valid enum value
-    if (!role || !Object.values(Role).includes(role)) {
+    // Validate role is a valid numeric enum value (1-4)
+    // Note: Role is numeric, so we must reject string values like "MERCHANT"
+    // that would cause DB errors when querying integer column
+    if (!role || typeof role !== 'number' || !Object.values(Role).includes(role)) {
       return {
         message: 'If an account exists with this email, a password reset link has been sent.',
       };

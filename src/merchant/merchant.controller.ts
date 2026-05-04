@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Param, Body, UseGuards, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Put, Param, Body, UseGuards, ParseUUIDPipe, ForbiddenException } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam, ApiResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -51,12 +51,23 @@ export class MerchantController {
   @ApiOperation({ summary: 'Update merchant details' })
   @ApiParam({ name: 'id', description: 'Merchant UUID' })
   @ApiResponse({ status: 404, description: 'Merchant not found' })
+  @ApiResponse({ status: 403, description: 'Not authorized to update this merchant' })
   async updateMerchant(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateMerchantDto,
+    @CurrentUser() user: { sub: string },
   ) {
-    const merchant = await this.merchantService.updateMerchant(id, dto);
-    return { status: 'success', data: merchant };
+    // Get the merchant first to check ownership
+    const merchant = await this.merchantService.getMerchantById(id);
+    
+    // Check if the current user owns this merchant or is admin
+    // Note: Add admin role check when admin functionality is implemented
+    if (merchant.ownerId !== user.sub) {
+      throw new ForbiddenException('Not authorized to update this merchant');
+    }
+    
+    const updated = await this.merchantService.updateMerchant(id, dto);
+    return { status: 'success', data: updated };
   }
 
   @Get('owner/:ownerId')
