@@ -9,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { randomBytes } from 'crypto';
+import * as bcrypt from 'bcrypt';
 import { StaffInvite } from '../entities/staff-invite.entity';
 import { InviteStatus } from '../../common/enums/invite-status.enum';
 import { Merchant } from '../entities/merchant.entity';
@@ -20,6 +21,7 @@ import { InviteStaffDto, AcceptInviteDto } from '../dto/invite.dto';
 @Injectable()
 export class InviteService {
   private readonly logger = new Logger(InviteService.name);
+  private readonly saltRounds = 10;
 
   constructor(
     @InjectRepository(StaffInvite)
@@ -191,9 +193,11 @@ export class InviteService {
       this.logger.log(`Linking existing user ${user.id} to merchant ${invite.merchantId}`);
     } else {
       // Create new user with STAFF role
+      const passwordHash = await bcrypt.hash(dto.password, this.saltRounds);
+      
       user = this.userRepository.create({
         email: invite.email,
-        password: dto.password,
+        passwordHash,
         firstName: dto.firstName,
         lastName: dto.lastName,
         role: Role.STAFF,

@@ -5,8 +5,9 @@ import {
   ManyToOne,
   JoinColumn,
   Index,
+  CreateDateColumn,
+  UpdateDateColumn,
 } from 'typeorm';
-import { BaseEntity } from '../../common/entities/base.entity';
 import { InviteStatus } from '../../common/enums/invite-status.enum';
 import { Merchant } from './merchant.entity';
 import { User } from '../../auth/entities/user.entity';
@@ -14,7 +15,7 @@ import { User } from '../../auth/entities/user.entity';
 @Entity('staff_invites')
 @Index(['token'], { unique: true })
 @Index(['email', 'merchantId'], { unique: true })
-export class StaffInvite extends BaseEntity {
+export class StaffInvite {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -60,4 +61,10 @@ export class StaffInvite extends BaseEntity {
 
   @Column({ type: 'varchar', nullable: true })
   role: string | null;
+
+  @CreateDateColumn({ type: 'timestamp' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamp' })
+  updatedAt: Date;
 }
