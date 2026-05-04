@@ -139,45 +139,6 @@ export class MailService {
   }
 
   /**
-   * Send password reset email with reset link
-   */
-  async sendPasswordResetEmail(email: string, resetToken: string, userName: string): Promise<void> {
-    const senderEmail = this.configService.get<string>('MAILJET_SENDER_EMAIL', 'noreply@taktip.io');
-    const senderName = this.configService.get<string>('MAILJET_SENDER_NAME', 'TakTip');
-    const appUrl = this.configService.get<string>('APP_URL', 'https://app.taktip.io');
-
-    try {
-      await this.sendEmail([
-        {
-          From: { Email: senderEmail, Name: senderName },
-          To: [{ Email: email, Name: userName }],
-          Subject: 'Reset your TakTip password',
-          TextPart: `You requested a password reset. Click the link to reset your password: ${appUrl}/reset-password?token=${resetToken}. This link expires in 1 hour. If you didn't request this, please ignore this email.`,
-          HTMLPart: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #333;">Reset your TakTip password</h2>
-              <p>Hello ${userName},</p>
-              <p>We received a request to reset your password. Click the button below to set a new password:</p>
-              <div style="text-align: center; margin: 30px 0;">
-                <a href="${appUrl}/reset-password?token=${resetToken}" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-size: 16px;">Reset Password</a>
-              </div>
-              <p style="color: #666; font-size: 14px;">This link expires in <strong>1 hour</strong>.</p>
-              <p style="color: #666; font-size: 14px;">If you didn't request a password reset, please ignore this email. Your password will remain unchanged.</p>
-              <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-              <p style="color: #999; font-size: 12px;">TakTip - Digital Tipping Platform</p>
-            </div>
-          `,
-        },
-      ]);
-
-      this.logger.log(`Password reset email sent to ${email}`);
-    } catch (error) {
-      this.logger.error(`Failed to send password reset email to ${email}:`, error);
-      throw error;
-    }
-  }
-
-  /**
    * Send welcome email after successful verification
    */
   async sendWelcomeEmail(email: string, businessName: string): Promise<void> {
@@ -225,6 +186,64 @@ export class MailService {
       } catch (fallbackError) {
         this.logger.error(`All email services failed for ${email}:`, fallbackError);
         // Don't throw - welcome email failure shouldn't block registration
+      }
+    }
+  }
+
+  /**
+   * Send staff invite email with invite link
+   */
+  async sendStaffInviteEmail(
+    email: string,
+    merchantName: string,
+    inviteLink: string,
+  ): Promise<void> {
+    const senderEmail = this.configService.get<string>('MAILJET_SENDER_EMAIL', 'noreply@taktip.io');
+    const senderName = this.configService.get<string>('MAILJET_SENDER_NAME', 'TakTip');
+
+    const emailContent = {
+      to: email,
+      toName: email.split('@')[0], // Use email username as name
+      subject: `You're invited to join ${merchantName} on TakTip`,
+      text: `You've been invited to join ${merchantName} on TakTip. Click the link to accept: ${inviteLink}. This invite expires in 24 hours.`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">You're invited to join ${merchantName}!</h2>
+          <p>Hello,</p>
+          <p>You've been invited to join <strong>${merchantName}</strong> on TakTip as a staff member.</p>
+          <p>Click the button below to accept the invitation and set up your account:</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${inviteLink}" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-size: 16px;">Accept Invitation</a>
+          </div>
+          <p style="color: #666; font-size: 14px;">This invite expires in <strong>24 hours</strong>.</p>
+          <p style="color: #666; font-size: 14px;">If you didn't expect this invitation, please ignore this email.</p>
+          <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+          <p style="color: #999; font-size: 12px;">TakTip - Digital Tipping Platform</p>
+        </div>
+      `,
+    };
+
+    try {
+      await this.sendEmail([
+        {
+          From: { Email: senderEmail, Name: senderName },
+          To: [{ Email: email, Name: emailContent.toName }],
+          Subject: emailContent.subject,
+          TextPart: emailContent.text,
+          HTMLPart: emailContent.html,
+        },
+      ]);
+
+      this.logger.log(`Staff invite email sent to ${email} via MailJet`);
+    } catch (mailjetError) {
+      this.logger.warn(`MailJet failed for ${email}, using fallback:`, mailjetError);
+
+      try {
+        await this.emailFallbackService.sendEmail(emailContent);
+        this.logger.log(`Staff invite email sent to ${email} via fallback (nodemailer)`);
+      } catch (fallbackError) {
+        this.logger.error(`All email services failed for ${email}:`, fallbackError);
+        throw fallbackError;
       }
     }
   }
