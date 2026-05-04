@@ -15,6 +15,7 @@ import { RefreshToken } from './entities/refresh-token.entity';
 import { PasswordReset } from './entities/password-reset.entity';
 import { jwtAuthGuard } from './guards/jwt-auth.guard';
 import { rolesGuard } from './guards/roles.guard';
+import { MerchantModule } from '../merchant/merchant.module';
 
 /**
  * Auth Module - Provides JWT authentication and authorization functionality
@@ -33,6 +34,7 @@ import { rolesGuard } from './guards/roles.guard';
   imports: [
     TypeOrmModule.forFeature([User, RefreshToken, PasswordReset]),
     ConfigModule,
+    MerchantModule,
   ],
   controllers: [AuthController],
   providers: [

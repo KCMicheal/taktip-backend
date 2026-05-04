@@ -23,6 +23,7 @@ import { OtpService } from './otp.service';
 import { MailService } from './mail.service';
 import { TokenService, TokenPair } from './token.service';
 import { Role } from '../enums/role.enum';
+import { MerchantService } from '../../merchant/merchant.service';
 
 export interface UserResponse {
   sub: string;
@@ -46,6 +47,7 @@ export class AuthService {
     private readonly otpService: OtpService,
     private readonly mailService: MailService,
     private readonly tokenService: TokenService,
+    private readonly merchantService: MerchantService,
   ) {}
 
   /**
@@ -75,6 +77,7 @@ export class AuthService {
       firstName: dto.firstName,
       lastName: dto.lastName,
       email: dto.email,
+      phone: dto.phoneNumber ?? null,
       passwordHash,
       role: Role.MERCHANT,
       isEmailVerified: false,
@@ -83,6 +86,14 @@ export class AuthService {
     });
 
     await this.userRepository.save(user);
+
+    // Create merchant for the user
+    await this.merchantService.createMerchant(
+      user.id,
+      dto.businessName,
+      dto.businessType,
+      dto.address,
+    );
 
     // Send OTP email
     await this.mailService.sendOtpEmail(dto.email, otp, dto.businessName);

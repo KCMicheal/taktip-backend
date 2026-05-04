@@ -12,6 +12,8 @@ import { TokenService } from '@/auth/services/token.service';
 import { User } from '@/auth/entities/user.entity';
 import { PasswordReset } from '@/auth/entities/password-reset.entity';
 import { Role } from '@/auth/enums/role.enum';
+import { Merchant } from '@/merchant/entities/merchant.entity';
+import { MerchantService } from '@/merchant/merchant.service';
 
 jest.mock('bcrypt');
 jest.mock('jose');
@@ -30,6 +32,7 @@ describe('AuthService', () => {
   let otpService: jest.Mocked<OtpService>;
   let mailService: jest.Mocked<MailService>;
   let tokenService: jest.Mocked<TokenService>;
+  let merchantService: jest.Mocked<MerchantService>;
 
   const mockUser: Partial<User> = {
     id: 'test-uuid',
@@ -106,6 +109,12 @@ describe('AuthService', () => {
             get: jest.fn(),
           },
         },
+        {
+          provide: MerchantService,
+          useValue: {
+            createMerchant: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -115,6 +124,7 @@ describe('AuthService', () => {
     otpService = module.get(OtpService);
     mailService = module.get(MailService);
     tokenService = module.get(TokenService);
+    merchantService = module.get(MerchantService);
   });
 
   afterEach(() => {
@@ -137,6 +147,12 @@ describe('AuthService', () => {
       otpService.getOtpExpiry.mockReturnValue(new Date(Date.now() + 900000));
       userRepository.create.mockReturnValue(mockUser as User);
       userRepository.save.mockResolvedValue(mockUser as User);
+      merchantService.createMerchant.mockResolvedValue({
+        id: 'merchant-id',
+        name: 'Test Restaurant',
+        shortCode: 'CODE123456-TS',
+        ownerId: mockUser.id,
+      } as Merchant);
       mailService.sendOtpEmail.mockResolvedValue(undefined);
 
       const result = await authService.registerMerchant(registerDto);
@@ -147,6 +163,12 @@ describe('AuthService', () => {
       expect(otpService.hashOtp).toHaveBeenCalledWith('123456');
       expect(mailService.sendOtpEmail).toHaveBeenCalledWith(registerDto.email, '123456', registerDto.businessName);
       expect(userRepository.save).toHaveBeenCalled();
+      expect(merchantService.createMerchant).toHaveBeenCalledWith(
+        mockUser.id,
+        registerDto.businessName,
+        undefined,
+        undefined,
+      );
     });
 
     it('should throw ConflictException if email already exists', async () => {

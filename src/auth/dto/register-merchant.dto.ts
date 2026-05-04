@@ -1,5 +1,6 @@
-import { IsEmail, IsNotEmpty, IsString, MinLength, Matches } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, MinLength, Matches, IsOptional, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { BusinessType } from '../../common/enums/business-type.enum';
 
 export class RegisterMerchantDto {
   @ApiProperty({
@@ -44,4 +45,32 @@ export class RegisterMerchantDto {
   @IsString()
   @IsNotEmpty({ message: 'Business name is required' })
   businessName!: string;
+
+  @ApiProperty({
+    description: 'Phone number',
+    example: '+2348012345678',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  phoneNumber?: string;
+
+  @ApiProperty({
+    description: 'Business type',
+    enum: BusinessType,
+    example: BusinessType.RESTAURANT,
+    required: false,
+  })
+  @IsEnum(BusinessType)
+  @IsOptional()
+  businessType?: BusinessType;
+
+  @ApiProperty({
+    description: 'Business address',
+    example: '123 Main St, Lagos',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  address?: string;
 }
