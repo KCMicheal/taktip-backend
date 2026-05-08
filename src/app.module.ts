@@ -50,14 +50,8 @@ import { GlobalExceptionFilter } from './common/filters/global-exception.filter'
       },
     }),
     // Rate limiting configuration
-    // Login endpoints: 5 requests per 15 minutes
     // Global endpoints: 120 requests per minute
     ThrottlerModule.forRoot([
-      {
-        name: 'login',
-        limit: 5,
-        ttl: 900000, // 15 minutes in milliseconds
-      },
       {
         name: 'global',
         limit: 120,
