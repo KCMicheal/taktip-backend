@@ -6,8 +6,8 @@ import {
   HttpStatus,
   Headers,
   UseGuards,
-  Throttle,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from '../services/auth.service';
 import { InviteService } from '../../merchant/services/invite.service';
