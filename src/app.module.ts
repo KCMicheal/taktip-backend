@@ -50,14 +50,16 @@ import { GlobalExceptionFilter } from './common/filters/global-exception.filter'
       },
     }),
     // Rate limiting configuration
-    // Global endpoints: 120 requests per minute
-    ThrottlerModule.forRoot([
-      {
-        name: 'global',
-        limit: 120,
-        ttl: 60000, // 1 minute in milliseconds
-      },
-    ]),
+    // Default: 120 requests per minute for all routes
+    // Use @Throttle() on specific routes to override (e.g., /login: 5 per 15 min)
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          limit: 120,
+          ttl: 60000, // 1 minute in milliseconds
+        },
+      ],
+    }),
     AuthModule,
     HealthModule,
   ],
