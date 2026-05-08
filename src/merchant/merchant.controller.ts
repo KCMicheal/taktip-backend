@@ -1,19 +1,37 @@
 import { Controller, Get, Put, Post, Param, Body, UseGuards, ParseUUIDPipe, ForbiddenException } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiBody, ApiPropertyOptional } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { MerchantService } from './merchant.service';
 import { InviteService } from './services/invite.service';
 import { BusinessType } from '../common/enums/business-type.enum';
 import { InviteStaffDto } from './dto/invite.dto';
+import { swaggerEnumValues } from '../common/helpers/enum-helper';
 
 class UpdateMerchantDto {
+  @ApiPropertyOptional({ description: 'Business name' })
   name?: string;
+
+  @ApiPropertyOptional({
+    description: 'Business type',
+    enum: swaggerEnumValues(BusinessType),
+    example: 'RESTAURANT',
+  })
   businessType?: BusinessType;
+
+  @ApiPropertyOptional({ description: 'Business address' })
   address?: string;
+
+  @ApiPropertyOptional({ description: 'Business description' })
   description?: string;
+
+  @ApiPropertyOptional({ description: 'Business logo URL' })
   logoUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Business currency', example: 'NGN' })
   currency?: string;
+
+  @ApiPropertyOptional({ description: 'Business timezone', example: 'Africa/Lagos' })
   timezone?: string;
 }
 
