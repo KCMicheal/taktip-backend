@@ -6,6 +6,7 @@ import { SchemaObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.inte
 import { AppModule } from './app.module';
 import { AuthModule } from './auth/auth.module';
 import { HealthModule } from './health/health.module';
+import { EnumTransformPipe } from './common/pipes/enum-transform.pipe';
 
 // Response schemas - defined inline to ensure they're included
 const responseSchemas: Record<string, SchemaObject> = {
@@ -148,6 +149,7 @@ async function bootstrap() {
       transform: true,
       forbidNonWhitelisted: true,
     }),
+    new EnumTransformPipe(),
   );
 
   const swaggerUrls = [];

@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Headers,
   UseGuards,
+  Throttle,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from '../services/auth.service';
@@ -111,6 +112,8 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @Public()
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+  @Throttle({ default: { limit: 5, ttl: 900000 } }) // 5 requests per 15 minutes
   @ApiOperation({ summary: 'Login with email/phone and password' })
   @ApiResponse({
     status: 200,
