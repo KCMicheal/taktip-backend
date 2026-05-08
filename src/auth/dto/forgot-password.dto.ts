@@ -1,6 +1,7 @@
 import { IsEmail, IsNotEmpty, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Role } from '../enums/role.enum';
+import { swaggerEnumValues } from '../../common/helpers/enum-helper';
 
 export class ForgotPasswordDto {
   @ApiProperty({
@@ -13,7 +14,7 @@ export class ForgotPasswordDto {
 
   @ApiProperty({
     description: 'User role (MERCHANT, STAFF, or ADMIN)',
-    enum: Role,
+    enum: swaggerEnumValues(Role),
     example: 'MERCHANT',
   })
   @IsEnum(Role, { message: 'Role must be one of: MERCHANT, STAFF, ADMIN' })
