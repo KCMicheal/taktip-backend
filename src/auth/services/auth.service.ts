@@ -214,11 +214,6 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Check if role matches
-    if (user.role !== dto.role) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
     // Check if user is active
     if (!user.isActive) {
       throw new UnauthorizedException('Account is deactivated');
