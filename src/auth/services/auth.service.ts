@@ -64,6 +64,16 @@ export class AuthService {
       throw new ConflictException('Email already registered');
     }
 
+    // Check if phone already exists (if provided)
+    if (dto.phoneNumber) {
+      const existingPhone = await this.userRepository.findOne({
+        where: { phone: dto.phoneNumber },
+      });
+      if (existingPhone) {
+        throw new ConflictException('Phone number already registered');
+      }
+    }
+
     // Generate OTP and hash
     const otp = this.otpService.generateOtp();
     const otpHash = await this.otpService.hashOtp(otp);
@@ -211,11 +221,6 @@ export class AuthService {
 
     // Return generic error to prevent user enumeration
     if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
-    // Check if role matches
-    if (user.role !== dto.role) {
       throw new UnauthorizedException('Invalid credentials');
     }
 

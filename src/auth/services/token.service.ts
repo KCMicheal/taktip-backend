@@ -41,6 +41,9 @@ export class TokenService {
     this.refreshTokenExpiryDays = Number(
       this.configService.get('REFRESH_TOKEN_EXPIRY_DAYS', '7'),
     );
+    if (isNaN(this.refreshTokenExpiryDays) || this.refreshTokenExpiryDays <= 0) {
+      this.refreshTokenExpiryDays = 7; // default to 7 days
+    }
   }
 
   /**
