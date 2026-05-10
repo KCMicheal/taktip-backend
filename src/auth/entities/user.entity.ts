@@ -21,7 +21,7 @@ export class User {
   @Column({ type: 'varchar', nullable: true, default: null })
   lastName: string | null;
 
-  @Column({ type: 'varchar', nullable: true, default: null })
+  @Column({ type: 'varchar', nullable: true, unique: true, default: null })
   phone: string | null;
 
   @Column({ type: 'varchar' })

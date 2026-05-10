@@ -64,6 +64,16 @@ export class AuthService {
       throw new ConflictException('Email already registered');
     }
 
+    // Check if phone already exists (if provided)
+    if (dto.phoneNumber) {
+      const existingPhone = await this.userRepository.findOne({
+        where: { phone: dto.phoneNumber },
+      });
+      if (existingPhone) {
+        throw new ConflictException('Phone number already registered');
+      }
+    }
+
     // Generate OTP and hash
     const otp = this.otpService.generateOtp();
     const otpHash = await this.otpService.hashOtp(otp);
