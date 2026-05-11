@@ -7,6 +7,7 @@ import { InviteService } from '../../../src/merchant/services/invite.service';
 import { StaffInvite } from '../../../src/merchant/entities/staff-invite.entity';
 import { Merchant } from '../../../src/merchant/entities/merchant.entity';
 import { User } from '../../../src/auth/entities/user.entity';
+import { StaffProfile } from '../../../src/staff/entities/staff-profile.entity';
 import { Role } from '../../../src/auth/enums/role.enum';
 import { InviteStatus } from '../../../src/common/enums/invite-status.enum';
 import { InviteStaffDto, AcceptInviteDto } from '../../../src/merchant/dto/invite.dto';
@@ -35,6 +36,12 @@ describe('InviteService', () => {
     save: jest.fn(),
   };
 
+  const mockStaffProfileRepository = {
+    findOne: jest.fn(),
+    create: jest.fn(),
+    save: jest.fn(),
+  };
+
   const mockMailService = {
     sendStaffInviteEmail: jest.fn(),
   };
@@ -58,6 +65,10 @@ describe('InviteService', () => {
         {
           provide: getRepositoryToken(User),
           useValue: mockUserRepository,
+        },
+        {
+          provide: getRepositoryToken(StaffProfile),
+          useValue: mockStaffProfileRepository,
         },
         {
           provide: MailService,
@@ -211,6 +222,14 @@ describe('InviteService', () => {
       mockInviteRepository.save.mockResolvedValue({ ...mockInvite, status: InviteStatus.ACCEPTED });
       mockMerchantRepository.findOne.mockResolvedValue({ id: 'merchant-uuid' });
 
+      // StaffProfile: no existing profile, create new one
+      mockStaffProfileRepository.findOne.mockResolvedValue(null);
+      mockStaffProfileRepository.create.mockReturnValue({
+        userId: 'new-user-uuid',
+        merchantId: 'merchant-uuid',
+      });
+      mockStaffProfileRepository.save.mockResolvedValue({});
+
       const dto: AcceptInviteDto = {
         token,
         password: 'SecurePass123!',
@@ -251,6 +270,14 @@ describe('InviteService', () => {
       mockUserRepository.findOne.mockResolvedValue(existingUser);
       mockInviteRepository.save.mockResolvedValue({ ...mockInvite, status: InviteStatus.ACCEPTED });
       mockMerchantRepository.findOne.mockResolvedValue({ id: 'merchant-uuid' });
+
+      // StaffProfile: no existing profile, create new one
+      mockStaffProfileRepository.findOne.mockResolvedValue(null);
+      mockStaffProfileRepository.create.mockReturnValue({
+        userId: 'existing-user-uuid',
+        merchantId: 'merchant-uuid',
+      });
+      mockStaffProfileRepository.save.mockResolvedValue({});
 
       const dto: AcceptInviteDto = {
         token,

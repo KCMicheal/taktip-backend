@@ -15,6 +15,7 @@ import { InviteStatus } from '../../common/enums/invite-status.enum';
 import { Merchant } from '../entities/merchant.entity';
 import { User } from '../../auth/entities/user.entity';
 import { Role } from '../../auth/enums/role.enum';
+import { StaffProfile } from '../../staff/entities/staff-profile.entity';
 import { MailService } from '../../auth/services/mail.service';
 import { InviteStaffDto, AcceptInviteDto } from '../dto/invite.dto';
 
@@ -30,6 +31,8 @@ export class InviteService {
     private readonly merchantRepository: Repository<Merchant>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(StaffProfile)
+    private readonly staffProfileRepository: Repository<StaffProfile>,
     private readonly mailService: MailService,
     private readonly configService: ConfigService,
   ) {}
@@ -221,6 +224,23 @@ export class InviteService {
 
     if (!merchant) {
       throw new NotFoundException('Merchant not found');
+    }
+
+    // Create or update staff profile
+    let staffProfile = await this.staffProfileRepository.findOne({
+      where: { userId: user.id },
+    });
+
+    if (!staffProfile) {
+      staffProfile = this.staffProfileRepository.create({
+        userId: user.id,
+        merchantId: merchant.id,
+        displayName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || null,
+        roleTag: invite.role || 'STAFF',
+        isClockedIn: false,
+      });
+      await this.staffProfileRepository.save(staffProfile);
+      this.logger.log(`Staff profile created for user ${user.id} at merchant ${merchant.id}`);
     }
 
     return { user, merchant };
