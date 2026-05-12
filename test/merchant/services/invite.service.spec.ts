@@ -47,7 +47,7 @@ describe('InviteService', () => {
   };
 
   const mockConfigService = {
-    get: jest.fn().mockReturnValue('https://app.taktip.io'),
+    get: jest.fn().mockReturnValue('https://app.taktip.com'),
   };
 
   beforeEach(async () => {
@@ -121,7 +121,7 @@ describe('InviteService', () => {
       expect(mockMailService.sendStaffInviteEmail).toHaveBeenCalledWith(
         dto.email,
         'Test Business',
-        expect.stringContaining('https://app.taktip.io/register/staff?token='),
+        expect.stringContaining('https://app.taktip.com/register/staff?token='),
       );
     });
 
@@ -202,6 +202,7 @@ describe('InviteService', () => {
       const mockInvite = {
         token,
         email: 'staff@example.com',
+        name: 'John Doe',
         status: InviteStatus.PENDING,
         merchantId: 'merchant-uuid',
         merchant: { id: 'merchant-uuid', name: 'Test Business' },
@@ -233,8 +234,6 @@ describe('InviteService', () => {
       const dto: AcceptInviteDto = {
         token,
         password: 'SecurePass123!',
-        firstName: 'John',
-        lastName: 'Doe',
       };
 
       const result = await service.acceptInvite(dto);
@@ -287,8 +286,6 @@ describe('InviteService', () => {
       const dto: AcceptInviteDto = {
         token,
         password: 'SecurePass123!',
-        firstName: 'John',
-        lastName: 'Doe',
       };
 
       const result = await service.acceptInvite(dto);
@@ -337,8 +334,6 @@ describe('InviteService', () => {
       const dto: AcceptInviteDto = {
         token,
         password: 'SecurePass123!',
-        firstName: 'John',
-        lastName: 'Doe',
       };
 
       const result = await service.acceptInvite(dto);

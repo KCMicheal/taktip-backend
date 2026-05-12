@@ -27,6 +27,16 @@ export class InviteStaffDto {
   @MinLength(3)
   @MaxLength(20)
   role?: string;
+
+  @ApiPropertyOptional({
+    description: 'Staff members full name (e.g. "Jane Doe")',
+    example: 'Jane Doe',
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(100)
+  name?: string;
 }
 
 export class AcceptInviteDto {
@@ -47,22 +57,4 @@ export class AcceptInviteDto {
   @MinLength(8)
   @MaxLength(100)
   password: string;
-
-  @ApiProperty({
-    description: 'User first name',
-    example: 'John',
-  })
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(50)
-  firstName: string;
-
-  @ApiProperty({
-    description: 'User last name',
-    example: 'Doe',
-  })
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(50)
-  lastName: string;
 }

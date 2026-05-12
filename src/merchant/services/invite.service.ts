@@ -52,7 +52,7 @@ export class InviteService {
     token: string,
     merchantName: string,
   ): Promise<void> {
-    const appUrl = this.configService.get<string>('APP_URL', 'https://app.taktip.io');
+    const appUrl = this.configService.get<string>('APP_URL', 'https://app.taktip.com');
 
     const inviteLink = `${appUrl}/register/staff?token=${token}`;
 
@@ -134,6 +134,7 @@ export class InviteService {
       status: InviteStatus.PENDING,
       expiresAt,
       role: dto.role || 'STAFF',
+      name: dto.name || null,
     });
 
     const savedInvite = await this.inviteRepository.save(invite);
@@ -197,12 +198,25 @@ export class InviteService {
     } else {
       // Create new user with STAFF role
       const passwordHash = await bcrypt.hash(dto.password, this.saltRounds);
-      
+
+      // Parse name from the invite record (set by merchant when inviting)
+      let firstName: string | null = null;
+      let lastName: string | null = null;
+      if (invite.name) {
+        const spaceIndex = invite.name.indexOf(' ');
+        if (spaceIndex > 0) {
+          firstName = invite.name.substring(0, spaceIndex);
+          lastName = invite.name.substring(spaceIndex + 1).trim() || null;
+        } else {
+          firstName = invite.name;
+        }
+      }
+
       user = this.userRepository.create({
         email: invite.email,
         passwordHash,
-        firstName: dto.firstName,
-        lastName: dto.lastName,
+        firstName,
+        lastName,
         role: Role.STAFF,
         isActive: true,
       });
