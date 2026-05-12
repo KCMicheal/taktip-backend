@@ -37,7 +37,7 @@ export class MailService {
    * Send OTP verification email
    */
   async sendOtpEmail(email: string, otp: string, businessName: string): Promise<void> {
-    const senderEmail = this.configService.get<string>('MAILJET_SENDER_EMAIL', 'noreply@taktip.io');
+    const senderEmail = this.configService.get<string>('MAILJET_SENDER_EMAIL', 'noreply@taktip.com');
     const senderName = this.configService.get<string>('MAILJET_SENDER_NAME', 'TakTip');
 
     const emailContent = {
@@ -88,9 +88,9 @@ export class MailService {
    * Send password reset email with reset link
    */
   async sendPasswordResetEmail(email: string, resetToken: string, userName: string): Promise<void> {
-    const senderEmail = this.configService.get<string>('MAILJET_SENDER_EMAIL', 'noreply@taktip.io');
+    const senderEmail = this.configService.get<string>('MAILJET_SENDER_EMAIL', 'noreply@taktip.com');
     const senderName = this.configService.get<string>('MAILJET_SENDER_NAME', 'TakTip');
-    const appUrl = this.configService.get<string>('APP_URL', 'https://app.taktip.io');
+    const appUrl = this.configService.get<string>('APP_URL', 'https://app.taktip.com');
 
     const emailContent = {
       to: email,
@@ -142,7 +142,7 @@ export class MailService {
    * Send welcome email after successful verification
    */
   async sendWelcomeEmail(email: string, businessName: string): Promise<void> {
-    const senderEmail = this.configService.get<string>('MAILJET_SENDER_EMAIL', 'noreply@taktip.io');
+    const senderEmail = this.configService.get<string>('MAILJET_SENDER_EMAIL', 'noreply@taktip.com');
     const senderName = this.configService.get<string>('MAILJET_SENDER_NAME', 'TakTip');
 
     const emailContent = {
@@ -198,7 +198,7 @@ export class MailService {
     merchantName: string,
     inviteLink: string,
   ): Promise<void> {
-    const senderEmail = this.configService.get<string>('MAILJET_SENDER_EMAIL', 'noreply@taktip.io');
+    const senderEmail = this.configService.get<string>('MAILJET_SENDER_EMAIL', 'noreply@taktip.com');
     const senderName = this.configService.get<string>('MAILJET_SENDER_NAME', 'TakTip');
 
     const emailContent = {

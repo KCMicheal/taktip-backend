@@ -28,7 +28,7 @@ describe('EmailFallbackService', () => {
           SMTP_SECURE: false,
           SMTP_USER: 'test-user',
           SMTP_PASS: 'test-pass',
-          SMTP_FROM: 'fallback@taktip.io',
+          SMTP_FROM: 'fallback@taktip.com',
           MAILJET_SENDER_NAME: 'TakTip',
         };
         return config[key] ?? defaultValue;
@@ -98,7 +98,7 @@ describe('EmailFallbackService', () => {
       await emailFallbackService.sendEmail(testEmailMessage);
 
       expect(mockTransporter.sendMail).toHaveBeenCalledWith({
-        from: '"TakTip" <fallback@taktip.io>',
+        from: '"TakTip" <fallback@taktip.com>',
         to: '"Test Recipient" <recipient@example.com>',
         subject: 'Test Subject',
         text: 'Test plain text content',
@@ -115,7 +115,7 @@ describe('EmailFallbackService', () => {
       await emailFallbackService.sendEmail(messageWithoutName);
 
       expect(mockTransporter.sendMail).toHaveBeenCalledWith({
-        from: '"TakTip" <fallback@taktip.io>',
+        from: '"TakTip" <fallback@taktip.com>',
         to: 'recipient@example.com',
         subject: 'Test Subject',
         text: 'Test plain text content',
@@ -140,7 +140,7 @@ describe('EmailFallbackService', () => {
           SMTP_SECURE: false,
           SMTP_USER: 'test-user',
           SMTP_PASS: 'test-pass',
-          SMTP_FROM: 'custom@taktip.io',
+          SMTP_FROM: 'custom@taktip.com',
           MAILJET_SENDER_NAME: 'Custom App',
         };
         return config[key] ?? defaultValue;
@@ -152,7 +152,7 @@ describe('EmailFallbackService', () => {
 
       expect(mockTransporter.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: '"Custom App" <custom@taktip.io>',
+          from: '"Custom App" <custom@taktip.com>',
         }),
       );
     });

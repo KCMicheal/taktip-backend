@@ -31,7 +31,7 @@ export class EmailFallbackService {
    * Send email via nodemailer (fallback)
    */
   async sendEmail(message: EmailMessage): Promise<void> {
-    const fromEmail = this.configService.get<string>('SMTP_FROM', 'noreply@taktip.io');
+    const fromEmail = this.configService.get<string>('SMTP_FROM', 'noreply@taktip.com');
     const fromName = this.configService.get<string>('MAILJET_SENDER_NAME', 'TakTip');
 
     try {

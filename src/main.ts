@@ -6,6 +6,7 @@ import { SchemaObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.inte
 import { AppModule } from './app.module';
 import { AuthModule } from './auth/auth.module';
 import { HealthModule } from './health/health.module';
+import { StaffModule } from './staff/staff.module';
 import { EnumTransformPipe } from './common/pipes/enum-transform.pipe';
 
 // Response schemas - defined inline to ensure they're included
@@ -161,10 +162,11 @@ async function bootstrap() {
     .addBearerAuth()
     .addTag('auth', 'Authentication endpoints')
     .addTag('health', 'Health check endpoints')
+    .addTag('staff', 'Staff dashboard and settings')
     .build();
 
   const baseDocument = SwaggerModule.createDocument(app, baseConfig, {
-    include: [AuthModule, HealthModule],
+    include: [AuthModule, HealthModule, StaffModule],
     deepScanRoutes: true,
   });
 

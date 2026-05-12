@@ -15,6 +15,7 @@ import { InviteStatus } from '../../common/enums/invite-status.enum';
 import { Merchant } from '../entities/merchant.entity';
 import { User } from '../../auth/entities/user.entity';
 import { Role } from '../../auth/enums/role.enum';
+import { StaffProfile } from '../../staff/entities/staff-profile.entity';
 import { MailService } from '../../auth/services/mail.service';
 import { InviteStaffDto, AcceptInviteDto } from '../dto/invite.dto';
 
@@ -30,6 +31,8 @@ export class InviteService {
     private readonly merchantRepository: Repository<Merchant>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(StaffProfile)
+    private readonly staffProfileRepository: Repository<StaffProfile>,
     private readonly mailService: MailService,
     private readonly configService: ConfigService,
   ) {}
@@ -49,7 +52,7 @@ export class InviteService {
     token: string,
     merchantName: string,
   ): Promise<void> {
-    const appUrl = this.configService.get<string>('APP_URL', 'https://app.taktip.io');
+    const appUrl = this.configService.get<string>('APP_URL', 'https://app.taktip.com');
 
     const inviteLink = `${appUrl}/register/staff?token=${token}`;
 
@@ -131,6 +134,7 @@ export class InviteService {
       status: InviteStatus.PENDING,
       expiresAt,
       role: dto.role || 'STAFF',
+      name: dto.name || null,
     });
 
     const savedInvite = await this.inviteRepository.save(invite);
@@ -194,12 +198,25 @@ export class InviteService {
     } else {
       // Create new user with STAFF role
       const passwordHash = await bcrypt.hash(dto.password, this.saltRounds);
-      
+
+      // Parse name from the invite record (set by merchant when inviting)
+      let firstName: string | null = null;
+      let lastName: string | null = null;
+      if (invite.name) {
+        const spaceIndex = invite.name.indexOf(' ');
+        if (spaceIndex > 0) {
+          firstName = invite.name.substring(0, spaceIndex);
+          lastName = invite.name.substring(spaceIndex + 1).trim() || null;
+        } else {
+          firstName = invite.name;
+        }
+      }
+
       user = this.userRepository.create({
         email: invite.email,
         passwordHash,
-        firstName: dto.firstName,
-        lastName: dto.lastName,
+        firstName,
+        lastName,
         role: Role.STAFF,
         isActive: true,
       });
@@ -221,6 +238,26 @@ export class InviteService {
 
     if (!merchant) {
       throw new NotFoundException('Merchant not found');
+    }
+
+    // Create staff profile for this (user, merchant) pair if one doesn't exist
+    // A user can have multiple staff profiles (one per merchant they work for)
+    const existingProfile = await this.staffProfileRepository.findOne({
+      where: { userId: user.id, merchantId: merchant.id },
+    });
+
+    if (!existingProfile) {
+      const staffProfile = this.staffProfileRepository.create({
+        userId: user.id,
+        merchantId: merchant.id,
+        displayName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || null,
+        roleTag: invite.role || 'STAFF',
+        isClockedIn: false,
+      });
+      await this.staffProfileRepository.save(staffProfile);
+      this.logger.log(`Staff profile created for user ${user.id} at merchant ${merchant.id}`);
+    } else {
+      this.logger.log(`Staff profile already exists for user ${user.id} at merchant ${merchant.id}, skipping creation`);
     }
 
     return { user, merchant };

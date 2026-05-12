@@ -27,3 +27,6 @@ npm-debug.log*
 
 # Test Coverage
 coverage/
+
+# Planning & Analysis Docs (not committed)
+.notes/

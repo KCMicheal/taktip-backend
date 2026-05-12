@@ -23,7 +23,7 @@ describe('MailService', () => {
         const config: Record<string, string> = {
           MAILJET_API_KEY: 'test-api-key',
           MAILJET_API_SECRET: 'test-api-secret',
-          MAILJET_SENDER_EMAIL: 'noreply@taktip.io',
+          MAILJET_SENDER_EMAIL: 'noreply@taktip.com',
           MAILJET_SENDER_NAME: 'TakTip',
         };
         return config[key] ?? defaultValue;
@@ -58,7 +58,7 @@ describe('MailService', () => {
       expect(mockMailjet.request).toHaveBeenCalledWith({
         Messages: expect.arrayContaining([
           expect.objectContaining({
-            From: { Email: 'noreply@taktip.io', Name: 'TakTip' },
+            From: { Email: 'noreply@taktip.com', Name: 'TakTip' },
             To: [{ Email: testEmail, Name: testBusinessName }],
             Subject: 'Verify your TakTip account',
           }),
@@ -206,7 +206,7 @@ describe('MailService', () => {
       expect(mockMailjet.request).toHaveBeenCalledWith({
         Messages: expect.arrayContaining([
           expect.objectContaining({
-            From: { Email: 'noreply@taktip.io', Name: 'TakTip' },
+            From: { Email: 'noreply@taktip.com', Name: 'TakTip' },
           }),
         ]),
       });
@@ -217,7 +217,7 @@ describe('MailService', () => {
         const config: Record<string, string> = {
           MAILJET_API_KEY: 'test-api-key',
           MAILJET_API_SECRET: 'test-api-secret',
-          MAILJET_SENDER_EMAIL: 'custom@taktip.io',
+          MAILJET_SENDER_EMAIL: 'custom@taktip.com',
           MAILJET_SENDER_NAME: 'Custom App',
         };
         return config[key] ?? defaultValue;
@@ -235,7 +235,7 @@ describe('MailService', () => {
       expect(mockMailjet.request).toHaveBeenCalledWith({
         Messages: expect.arrayContaining([
           expect.objectContaining({
-            From: { Email: 'custom@taktip.io', Name: 'Custom App' },
+            From: { Email: 'custom@taktip.com', Name: 'Custom App' },
           }),
         ]),
       });

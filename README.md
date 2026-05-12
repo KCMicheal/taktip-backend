@@ -358,8 +358,8 @@ Private & Confidential — T-One Technologies © 2026
 ## 🆘 Support
 
 For technical support, please contact:
-- **Email**: support@taktip.io
-- **Documentation**: https://docs.taktip.io
+- **Email**: support@taktip.com
+- **Documentation**: https://docs.taktip.com
 
 ---
 

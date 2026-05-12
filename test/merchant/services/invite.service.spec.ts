@@ -7,6 +7,7 @@ import { InviteService } from '../../../src/merchant/services/invite.service';
 import { StaffInvite } from '../../../src/merchant/entities/staff-invite.entity';
 import { Merchant } from '../../../src/merchant/entities/merchant.entity';
 import { User } from '../../../src/auth/entities/user.entity';
+import { StaffProfile } from '../../../src/staff/entities/staff-profile.entity';
 import { Role } from '../../../src/auth/enums/role.enum';
 import { InviteStatus } from '../../../src/common/enums/invite-status.enum';
 import { InviteStaffDto, AcceptInviteDto } from '../../../src/merchant/dto/invite.dto';
@@ -35,12 +36,18 @@ describe('InviteService', () => {
     save: jest.fn(),
   };
 
+  const mockStaffProfileRepository = {
+    findOne: jest.fn(),
+    create: jest.fn(),
+    save: jest.fn(),
+  };
+
   const mockMailService = {
     sendStaffInviteEmail: jest.fn(),
   };
 
   const mockConfigService = {
-    get: jest.fn().mockReturnValue('https://app.taktip.io'),
+    get: jest.fn().mockReturnValue('https://app.taktip.com'),
   };
 
   beforeEach(async () => {
@@ -58,6 +65,10 @@ describe('InviteService', () => {
         {
           provide: getRepositoryToken(User),
           useValue: mockUserRepository,
+        },
+        {
+          provide: getRepositoryToken(StaffProfile),
+          useValue: mockStaffProfileRepository,
         },
         {
           provide: MailService,
@@ -110,7 +121,7 @@ describe('InviteService', () => {
       expect(mockMailService.sendStaffInviteEmail).toHaveBeenCalledWith(
         dto.email,
         'Test Business',
-        expect.stringContaining('https://app.taktip.io/register/staff?token='),
+        expect.stringContaining('https://app.taktip.com/register/staff?token='),
       );
     });
 
@@ -191,6 +202,7 @@ describe('InviteService', () => {
       const mockInvite = {
         token,
         email: 'staff@example.com',
+        name: 'John Doe',
         status: InviteStatus.PENDING,
         merchantId: 'merchant-uuid',
         merchant: { id: 'merchant-uuid', name: 'Test Business' },
@@ -211,17 +223,28 @@ describe('InviteService', () => {
       mockInviteRepository.save.mockResolvedValue({ ...mockInvite, status: InviteStatus.ACCEPTED });
       mockMerchantRepository.findOne.mockResolvedValue({ id: 'merchant-uuid' });
 
+      // StaffProfile: no existing profile for this merchant, create new one
+      mockStaffProfileRepository.findOne.mockResolvedValue(null);
+      mockStaffProfileRepository.create.mockReturnValue({
+        userId: 'new-user-uuid',
+        merchantId: 'merchant-uuid',
+      });
+      mockStaffProfileRepository.save.mockResolvedValue({});
+
       const dto: AcceptInviteDto = {
         token,
         password: 'SecurePass123!',
-        firstName: 'John',
-        lastName: 'Doe',
       };
 
       const result = await service.acceptInvite(dto);
 
       expect(result.user).toEqual(newUser);
       expect(result.merchant).toBeDefined();
+      expect(mockStaffProfileRepository.findOne).toHaveBeenCalledWith({
+        where: { userId: 'new-user-uuid', merchantId: 'merchant-uuid' },
+      });
+      expect(mockStaffProfileRepository.create).toHaveBeenCalled();
+      expect(mockStaffProfileRepository.save).toHaveBeenCalled();
       expect(mockUserRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({
           email: 'staff@example.com',
@@ -230,6 +253,54 @@ describe('InviteService', () => {
           role: Role.STAFF,
         }),
       );
+    });
+
+    it('should create new staff profile for new merchant (same user, different merchant)', async () => {
+      const token = 'another-merchant-token';
+      const existingUser = {
+        id: 'existing-user-uuid',
+        email: 'staff@example.com',
+      };
+
+      const mockInvite = {
+        token,
+        email: 'staff@example.com',
+        status: InviteStatus.PENDING,
+        merchantId: 'merchant-b-uuid',
+        merchant: { id: 'merchant-b-uuid' },
+      };
+
+      mockInviteRepository.findOne.mockResolvedValue(mockInvite);
+      mockUserRepository.findOne.mockResolvedValue(existingUser);
+      mockInviteRepository.save.mockResolvedValue({ ...mockInvite, status: InviteStatus.ACCEPTED });
+      mockMerchantRepository.findOne.mockResolvedValue({ id: 'merchant-b-uuid' });
+
+      // User already has a profile for Merchant A, but NOT for Merchant B → create new
+      mockStaffProfileRepository.findOne.mockResolvedValue(null);
+      mockStaffProfileRepository.create.mockReturnValue({
+        userId: 'existing-user-uuid',
+        merchantId: 'merchant-b-uuid',
+      });
+      mockStaffProfileRepository.save.mockResolvedValue({});
+
+      const dto: AcceptInviteDto = {
+        token,
+        password: 'SecurePass123!',
+      };
+
+      const result = await service.acceptInvite(dto);
+
+      expect(result.user).toEqual(existingUser);
+      expect(mockStaffProfileRepository.findOne).toHaveBeenCalledWith({
+        where: { userId: 'existing-user-uuid', merchantId: 'merchant-b-uuid' },
+      });
+      expect(mockStaffProfileRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'existing-user-uuid',
+          merchantId: 'merchant-b-uuid',
+        }),
+      );
+      expect(mockStaffProfileRepository.save).toHaveBeenCalled();
     });
 
     it('should link existing user to merchant', async () => {
@@ -252,16 +323,27 @@ describe('InviteService', () => {
       mockInviteRepository.save.mockResolvedValue({ ...mockInvite, status: InviteStatus.ACCEPTED });
       mockMerchantRepository.findOne.mockResolvedValue({ id: 'merchant-uuid' });
 
+      // StaffProfile: no existing profile for this merchant, create new one
+      mockStaffProfileRepository.findOne.mockResolvedValue(null);
+      mockStaffProfileRepository.create.mockReturnValue({
+        userId: 'existing-user-uuid',
+        merchantId: 'merchant-uuid',
+      });
+      mockStaffProfileRepository.save.mockResolvedValue({});
+
       const dto: AcceptInviteDto = {
         token,
         password: 'SecurePass123!',
-        firstName: 'John',
-        lastName: 'Doe',
       };
 
       const result = await service.acceptInvite(dto);
 
       expect(result.user).toEqual(existingUser);
+      expect(mockStaffProfileRepository.findOne).toHaveBeenCalledWith({
+        where: { userId: 'existing-user-uuid', merchantId: 'merchant-uuid' },
+      });
+      expect(mockStaffProfileRepository.create).toHaveBeenCalled();
+      expect(mockStaffProfileRepository.save).toHaveBeenCalled();
       expect(mockUserRepository.create).not.toHaveBeenCalled();
     });
   });

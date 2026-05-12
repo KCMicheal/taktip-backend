@@ -62,6 +62,9 @@ export class StaffInvite {
   @Column({ type: 'varchar', nullable: true })
   role: string | null;
 
+  @Column({ type: 'varchar', nullable: true })
+  name: string | null;
+
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
 
