@@ -226,13 +226,14 @@ export class InviteService {
       throw new NotFoundException('Merchant not found');
     }
 
-    // Create or update staff profile
-    let staffProfile = await this.staffProfileRepository.findOne({
-      where: { userId: user.id },
+    // Create staff profile for this (user, merchant) pair if one doesn't exist
+    // A user can have multiple staff profiles (one per merchant they work for)
+    const existingProfile = await this.staffProfileRepository.findOne({
+      where: { userId: user.id, merchantId: merchant.id },
     });
 
-    if (!staffProfile) {
-      staffProfile = this.staffProfileRepository.create({
+    if (!existingProfile) {
+      const staffProfile = this.staffProfileRepository.create({
         userId: user.id,
         merchantId: merchant.id,
         displayName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || null,
@@ -241,6 +242,8 @@ export class InviteService {
       });
       await this.staffProfileRepository.save(staffProfile);
       this.logger.log(`Staff profile created for user ${user.id} at merchant ${merchant.id}`);
+    } else {
+      this.logger.log(`Staff profile already exists for user ${user.id} at merchant ${merchant.id}, skipping creation`);
     }
 
     return { user, merchant };

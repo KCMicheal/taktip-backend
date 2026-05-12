@@ -63,6 +63,20 @@ export interface StaffSettingsDto {
   } | null;
 }
 
+/**
+ * Response DTO for the staff profiles list
+ */
+export interface StaffProfilesListDto {
+  profiles: Array<{
+    profileId: string;
+    merchantId: string | null;
+    merchantName: string | null;
+    merchantShortCode: string | null;
+    roleTag: string | null;
+    displayName: string | null;
+  }>;
+}
+
 @Injectable()
 export class StaffService {
   private readonly logger = new Logger(StaffService.name);
@@ -82,19 +96,76 @@ export class StaffService {
   }
 
   /**
-   * Find a staff profile by user ID, or throw if not found
+   * Find a staff profile by user ID and optional merchant ID.
+   *
+   * - If merchantId is provided, finds the unique (user, merchant) pair.
+   * - If merchantId is omitted and the user has exactly one profile, returns it.
+   * - If merchantId is omitted and the user has multiple profiles, throws 400
+   *   (the caller must disambiguate with merchantId).
+   *
+   * A user can have multiple staff profiles (one per merchant they work for).
    */
-  async getProfileByUserId(userId: string): Promise<StaffProfile> {
-    const profile = await this.staffProfileRepository.findOne({
+  private async getProfile(
+    userId: string,
+    merchantId?: string,
+  ): Promise<StaffProfile> {
+    if (merchantId) {
+      const profile = await this.staffProfileRepository.findOne({
+        where: { userId, merchantId },
+        relations: ['user', 'merchant'],
+      });
+
+      if (!profile) {
+        throw new NotFoundException('Staff profile not found for this merchant');
+      }
+
+      return profile;
+    }
+
+    // No merchantId — try single-profile fallback
+    const profiles = await this.staffProfileRepository.find({
       where: { userId },
       relations: ['user', 'merchant'],
     });
 
-    if (!profile) {
+    if (profiles.length === 0) {
       throw new NotFoundException('Staff profile not found');
     }
 
-    return profile;
+    if (profiles.length > 1) {
+      throw new BadRequestException(
+        'Multiple staff profiles found. Please provide merchantId query parameter.',
+      );
+    }
+
+    return profiles[0];
+  }
+
+  /**
+   * GET /staff/profiles
+   * Returns all merchant profiles for the authenticated user.
+   */
+  async getProfilesList(
+    userId: string,
+    userRole: Role,
+  ): Promise<StaffProfilesListDto> {
+    this.assertStaffRole(userRole);
+
+    const profiles = await this.staffProfileRepository.find({
+      where: { userId },
+      relations: ['merchant'],
+    });
+
+    return {
+      profiles: profiles.map(p => ({
+        profileId: p.id,
+        merchantId: p.merchantId,
+        merchantName: p.merchant?.name || null,
+        merchantShortCode: p.merchant?.shortCode || null,
+        roleTag: p.roleTag,
+        displayName: p.displayName,
+      })),
+    };
   }
 
   /**
@@ -104,10 +175,11 @@ export class StaffService {
   async getDashboard(
     userId: string,
     userRole: Role,
+    merchantId?: string,
   ): Promise<StaffDashboardDto> {
     this.assertStaffRole(userRole);
 
-    const profile = await this.getProfileByUserId(userId);
+    const profile = await this.getProfile(userId, merchantId);
 
     return {
       profile: {
@@ -141,10 +213,11 @@ export class StaffService {
   async getSettings(
     userId: string,
     userRole: Role,
+    merchantId?: string,
   ): Promise<StaffSettingsDto> {
     this.assertStaffRole(userRole);
 
-    const profile = await this.getProfileByUserId(userId);
+    const profile = await this.getProfile(userId, merchantId);
 
     return {
       profile: {
@@ -180,10 +253,11 @@ export class StaffService {
     userId: string,
     userRole: Role,
     dto: UpdateSettingsDto,
+    merchantId?: string,
   ): Promise<StaffSettingsDto> {
     this.assertStaffRole(userRole);
 
-    const profile = await this.getProfileByUserId(userId);
+    const profile = await this.getProfile(userId, merchantId);
 
     if (dto.displayName !== undefined) {
       profile.displayName = dto.displayName;
@@ -201,7 +275,7 @@ export class StaffService {
 
     await this.staffProfileRepository.save(profile);
 
-    return this.getSettings(userId, userRole);
+    return this.getSettings(userId, userRole, merchantId);
   }
 
   /**
@@ -212,10 +286,11 @@ export class StaffService {
     userId: string,
     userRole: Role,
     dto: PayoutMethodDto,
+    merchantId?: string,
   ): Promise<{ message: string }> {
     this.assertStaffRole(userRole);
 
-    const profile = await this.getProfileByUserId(userId);
+    const profile = await this.getProfile(userId, merchantId);
 
     // Validate account number (basic check)
     if (!/^\d{10}$/.test(dto.accountNumber)) {

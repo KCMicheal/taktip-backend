@@ -27,7 +27,7 @@ export class CreateStaffProfilesTable1710000000000 implements MigrationInterface
         "settings"      jsonb,
 
         CONSTRAINT "PK_staff_profiles" PRIMARY KEY ("id"),
-        CONSTRAINT "UQ_staff_profiles_userId" UNIQUE ("userId"),
+        CONSTRAINT "UQ_staff_profiles_merchantId_userId" UNIQUE ("merchantId", "userId"),
         CONSTRAINT "FK_staff_profiles_user" FOREIGN KEY ("userId")
           REFERENCES "users"("id") ON DELETE CASCADE,
         CONSTRAINT "FK_staff_profiles_merchant" FOREIGN KEY ("merchantId")
@@ -35,15 +35,9 @@ export class CreateStaffProfilesTable1710000000000 implements MigrationInterface
       )
     `);
 
-    // Create indexes
-    await queryRunner.query(`
-      CREATE INDEX "IDX_staff_profiles_merchantId_userId"
-        ON "staff_profiles" ("merchantId", "userId")
-    `);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX "IDX_staff_profiles_merchantId_userId"`);
     await queryRunner.query(`DROP TABLE "staff_profiles"`);
   }
 }

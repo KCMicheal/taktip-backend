@@ -11,8 +11,7 @@ import { User } from '../../auth/entities/user.entity';
 import { Merchant } from '../../merchant/entities/merchant.entity';
 
 @Entity('staff_profiles')
-@Index(['userId'], { unique: true })
-@Index(['merchantId', 'userId'])
+@Index(['merchantId', 'userId'], { unique: true })
 export class StaffProfile extends BaseEntity {
   @Column({ type: 'uuid' })
   userId: string;

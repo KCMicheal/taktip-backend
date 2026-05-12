@@ -222,7 +222,7 @@ describe('InviteService', () => {
       mockInviteRepository.save.mockResolvedValue({ ...mockInvite, status: InviteStatus.ACCEPTED });
       mockMerchantRepository.findOne.mockResolvedValue({ id: 'merchant-uuid' });
 
-      // StaffProfile: no existing profile, create new one
+      // StaffProfile: no existing profile for this merchant, create new one
       mockStaffProfileRepository.findOne.mockResolvedValue(null);
       mockStaffProfileRepository.create.mockReturnValue({
         userId: 'new-user-uuid',
@@ -241,6 +241,11 @@ describe('InviteService', () => {
 
       expect(result.user).toEqual(newUser);
       expect(result.merchant).toBeDefined();
+      expect(mockStaffProfileRepository.findOne).toHaveBeenCalledWith({
+        where: { userId: 'new-user-uuid', merchantId: 'merchant-uuid' },
+      });
+      expect(mockStaffProfileRepository.create).toHaveBeenCalled();
+      expect(mockStaffProfileRepository.save).toHaveBeenCalled();
       expect(mockUserRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({
           email: 'staff@example.com',
@@ -249,6 +254,56 @@ describe('InviteService', () => {
           role: Role.STAFF,
         }),
       );
+    });
+
+    it('should create new staff profile for new merchant (same user, different merchant)', async () => {
+      const token = 'another-merchant-token';
+      const existingUser = {
+        id: 'existing-user-uuid',
+        email: 'staff@example.com',
+      };
+
+      const mockInvite = {
+        token,
+        email: 'staff@example.com',
+        status: InviteStatus.PENDING,
+        merchantId: 'merchant-b-uuid',
+        merchant: { id: 'merchant-b-uuid' },
+      };
+
+      mockInviteRepository.findOne.mockResolvedValue(mockInvite);
+      mockUserRepository.findOne.mockResolvedValue(existingUser);
+      mockInviteRepository.save.mockResolvedValue({ ...mockInvite, status: InviteStatus.ACCEPTED });
+      mockMerchantRepository.findOne.mockResolvedValue({ id: 'merchant-b-uuid' });
+
+      // User already has a profile for Merchant A, but NOT for Merchant B → create new
+      mockStaffProfileRepository.findOne.mockResolvedValue(null);
+      mockStaffProfileRepository.create.mockReturnValue({
+        userId: 'existing-user-uuid',
+        merchantId: 'merchant-b-uuid',
+      });
+      mockStaffProfileRepository.save.mockResolvedValue({});
+
+      const dto: AcceptInviteDto = {
+        token,
+        password: 'SecurePass123!',
+        firstName: 'John',
+        lastName: 'Doe',
+      };
+
+      const result = await service.acceptInvite(dto);
+
+      expect(result.user).toEqual(existingUser);
+      expect(mockStaffProfileRepository.findOne).toHaveBeenCalledWith({
+        where: { userId: 'existing-user-uuid', merchantId: 'merchant-b-uuid' },
+      });
+      expect(mockStaffProfileRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'existing-user-uuid',
+          merchantId: 'merchant-b-uuid',
+        }),
+      );
+      expect(mockStaffProfileRepository.save).toHaveBeenCalled();
     });
 
     it('should link existing user to merchant', async () => {
@@ -271,7 +326,7 @@ describe('InviteService', () => {
       mockInviteRepository.save.mockResolvedValue({ ...mockInvite, status: InviteStatus.ACCEPTED });
       mockMerchantRepository.findOne.mockResolvedValue({ id: 'merchant-uuid' });
 
-      // StaffProfile: no existing profile, create new one
+      // StaffProfile: no existing profile for this merchant, create new one
       mockStaffProfileRepository.findOne.mockResolvedValue(null);
       mockStaffProfileRepository.create.mockReturnValue({
         userId: 'existing-user-uuid',
@@ -289,6 +344,11 @@ describe('InviteService', () => {
       const result = await service.acceptInvite(dto);
 
       expect(result.user).toEqual(existingUser);
+      expect(mockStaffProfileRepository.findOne).toHaveBeenCalledWith({
+        where: { userId: 'existing-user-uuid', merchantId: 'merchant-uuid' },
+      });
+      expect(mockStaffProfileRepository.create).toHaveBeenCalled();
+      expect(mockStaffProfileRepository.save).toHaveBeenCalled();
       expect(mockUserRepository.create).not.toHaveBeenCalled();
     });
   });

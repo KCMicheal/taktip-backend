@@ -14,6 +14,7 @@ describe('StaffController', () => {
     getSettings: jest.fn(),
     updateSettings: jest.fn(),
     savePayoutMethod: jest.fn(),
+    getProfilesList: jest.fn(),
   };
 
   const mockJwtService = {
@@ -49,7 +50,7 @@ describe('StaffController', () => {
   });
 
   describe('getDashboard', () => {
-    it('should return staff dashboard data', async () => {
+    it('should return staff dashboard data (no merchantId)', async () => {
       const expectedData = {
         profile: {
           id: 'profile-uuid',
@@ -74,19 +75,32 @@ describe('StaffController', () => {
 
       mockStaffService.getDashboard.mockResolvedValue(expectedData);
 
-      const result = await controller.getDashboard(mockUser);
+      const result = await controller.getDashboard(mockUser, undefined);
 
       expect(result.status).toBe('success');
       expect(result.data).toEqual(expectedData);
       expect(mockStaffService.getDashboard).toHaveBeenCalledWith(
         'user-uuid',
         Role.STAFF,
+        undefined,
+      );
+    });
+
+    it('should return dashboard data scoped to merchantId', async () => {
+      mockStaffService.getDashboard.mockResolvedValue({ profile: {}, user: {}, merchant: {} });
+
+      const result = await controller.getDashboard(mockUser, 'merchant-uuid');
+
+      expect(mockStaffService.getDashboard).toHaveBeenCalledWith(
+        'user-uuid',
+        Role.STAFF,
+        'merchant-uuid',
       );
     });
   });
 
   describe('getSettings', () => {
-    it('should return staff settings', async () => {
+    it('should return staff settings (no merchantId)', async () => {
       const expectedData = {
         profile: {
           id: 'profile-uuid',
@@ -112,19 +126,20 @@ describe('StaffController', () => {
 
       mockStaffService.getSettings.mockResolvedValue(expectedData);
 
-      const result = await controller.getSettings(mockUser);
+      const result = await controller.getSettings(mockUser, undefined);
 
       expect(result.status).toBe('success');
       expect(result.data).toEqual(expectedData);
       expect(mockStaffService.getSettings).toHaveBeenCalledWith(
         'user-uuid',
         Role.STAFF,
+        undefined,
       );
     });
   });
 
   describe('updateSettings', () => {
-    it('should update settings and return updated data', async () => {
+    it('should update settings and return updated data (no merchantId)', async () => {
       const dto = {
         displayName: 'John the Waiter',
       };
@@ -154,7 +169,7 @@ describe('StaffController', () => {
 
       mockStaffService.updateSettings.mockResolvedValue(expectedData);
 
-      const result = await controller.updateSettings(mockUser, dto);
+      const result = await controller.updateSettings(mockUser, dto, undefined);
 
       expect(result.status).toBe('success');
       expect(result.data.profile.displayName).toBe('John the Waiter');
@@ -162,12 +177,13 @@ describe('StaffController', () => {
         'user-uuid',
         Role.STAFF,
         dto,
+        undefined,
       );
     });
   });
 
   describe('savePayoutMethod', () => {
-    it('should save payout method and return success message', async () => {
+    it('should save payout method and return success message (no merchantId)', async () => {
       const dto = {
         accountNumber: '0123456789',
         bankCode: '058',
@@ -178,7 +194,7 @@ describe('StaffController', () => {
         message: 'Payout method saved successfully',
       });
 
-      const result = await controller.savePayoutMethod(mockUser, dto);
+      const result = await controller.savePayoutMethod(mockUser, dto, undefined);
 
       expect(result.status).toBe('success');
       expect(result.message).toBe('Payout method saved successfully');
@@ -186,6 +202,35 @@ describe('StaffController', () => {
         'user-uuid',
         Role.STAFF,
         dto,
+        undefined,
+      );
+    });
+  });
+
+  describe('getProfiles', () => {
+    it('should return list of staff profiles', async () => {
+      const expectedData = {
+        profiles: [
+          {
+            profileId: 'profile-1',
+            merchantId: 'merchant-a',
+            merchantName: 'Restaurant A',
+            merchantShortCode: 'ABC',
+            roleTag: 'waiter',
+            displayName: 'John Doe',
+          },
+        ],
+      };
+
+      mockStaffService.getProfilesList.mockResolvedValue(expectedData);
+
+      const result = await controller.getProfiles(mockUser);
+
+      expect(result.status).toBe('success');
+      expect(result.data).toEqual(expectedData);
+      expect(mockStaffService.getProfilesList).toHaveBeenCalledWith(
+        'user-uuid',
+        Role.STAFF,
       );
     });
   });
