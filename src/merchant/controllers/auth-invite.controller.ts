@@ -15,7 +15,7 @@ export class AuthInviteController {
   @ApiOperation({
     summary: 'Look up an invite by token (public)',
     description:
-      'Returns basic invite info (email, name) for a valid invite token. ' +
+      'Returns basic invite info (email, name, merchantName) for a valid invite token. ' +
       'Used by the frontend registration page to pre-fill the staff member details.',
   })
   @ApiQuery({
@@ -36,6 +36,7 @@ export class AuthInviteController {
           properties: {
             email: { type: 'string', example: 'staff@example.com' },
             name: { type: 'string', example: 'Jane Doe', nullable: true },
+            merchantName: { type: 'string', example: 'Joe\'s Restaurant' },
           },
         },
       },
@@ -50,6 +51,7 @@ export class AuthInviteController {
       data: {
         email: invite.email,
         name: invite.name || null,
+        merchantName: invite.merchant.name,
       },
     };
   }

@@ -34,6 +34,7 @@ describe('AuthInviteController', () => {
       const mockInvite = {
         email: 'staff@example.com',
         name: 'Jane Doe',
+        merchant: { name: "Joe's Restaurant" },
         status: InviteStatus.PENDING,
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       };
@@ -45,6 +46,7 @@ describe('AuthInviteController', () => {
       expect(result.status).toBe('success');
       expect(result.data.email).toBe('staff@example.com');
       expect(result.data.name).toBe('Jane Doe');
+      expect(result.data.merchantName).toBe("Joe's Restaurant");
       expect(mockInviteService.validateToken).toHaveBeenCalledWith('valid-token');
     });
 
@@ -52,6 +54,7 @@ describe('AuthInviteController', () => {
       const mockInvite = {
         email: 'staff@example.com',
         name: null,
+        merchant: { name: 'Test Business' },
         status: InviteStatus.PENDING,
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       };
@@ -63,6 +66,7 @@ describe('AuthInviteController', () => {
       expect(result.status).toBe('success');
       expect(result.data.email).toBe('staff@example.com');
       expect(result.data.name).toBeNull();
+      expect(result.data.merchantName).toBe('Test Business');
     });
 
     it('should throw NotFoundException for invalid token', async () => {
