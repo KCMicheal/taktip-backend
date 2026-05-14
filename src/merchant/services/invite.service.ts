@@ -219,6 +219,7 @@ export class InviteService {
         lastName,
         role: Role.STAFF,
         isActive: true,
+        isEmailVerified: true
       });
 
       user = await this.userRepository.save(user);
