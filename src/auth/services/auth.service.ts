@@ -29,6 +29,8 @@ export interface UserResponse {
   sub: string;
   email: string;
   phone: string | null;
+  firstName: string | null;
+  lastName: string | null;
   role: Role;
   isVerified: boolean;
 }
@@ -202,6 +204,8 @@ export class AuthService {
       sub: user.id,
       email: user.email,
       phone: user.phone,
+      firstName: user.firstName,
+      lastName: user.lastName,
       role: user.role,
       isVerified: user.isEmailVerified,
     };
