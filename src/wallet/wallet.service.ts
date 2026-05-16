@@ -135,13 +135,12 @@ export class WalletService {
 
   /**
    * GET /wallets/:walletId
-   * Get wallet by ID
+   * Get wallet by ID — enforces ownership: only the wallet's merchant can read it.
    */
   async getWalletById(
     walletId: string,
     user: { sub: string; role: Role },
   ): Promise<Wallet> {
-    // Any authenticated user can view wallet info
     const wallet = await this.walletRepository.findOne({
       where: { id: walletId },
     });
@@ -150,18 +149,22 @@ export class WalletService {
       throw new NotFoundException('Wallet not found');
     }
 
+    // Enforce ownership: the calling user must own the merchant this wallet
+    // belongs to.  This prevents arbitrary wallet enumeration by ID.
+    await this.assertOwnsWallet(user.sub, wallet);
+
     return wallet;
   }
 
   /**
    * GET /wallets/merchant/:merchantId
-   * Get wallet by merchant ID
+   * Get wallet by merchant ID — enforces ownership: only the merchant's
+   * owner can look up their own wallet.
    */
   async getWalletByMerchantId(
     merchantId: string,
     user: { sub: string; role: Role },
   ): Promise<Wallet> {
-    // Any authenticated user can look up a merchant's wallet
     const wallet = await this.walletRepository.findOne({
       where: { merchantId },
     });
@@ -170,12 +173,16 @@ export class WalletService {
       throw new NotFoundException('Wallet not found for this merchant');
     }
 
+    // Enforce ownership: only the merchant's owner can view their wallet
+    await this.assertOwnsWallet(user.sub, wallet);
+
     return wallet;
   }
 
   /**
    * POST /wallets/deposit
-   * Deposit funds to a wallet
+   * Deposit funds to a wallet — uses atomic SQL increment to prevent lost writes
+   * under concurrent requests on the same wallet.
    */
   async deposit(
     user: { sub: string; role: Role },
@@ -184,14 +191,23 @@ export class WalletService {
     this.assertMerchantRole(user.role);
 
     const wallet = await this.getWalletById(dto.walletId, user);
-    await this.assertOwnsWallet(user.sub, wallet);
+    // Ownership is enforced inside getWalletById
 
     const reference = dto.reference || this.generateReference('DEP');
 
     return this.walletRepository.manager.transaction(
       async (entityManager) => {
-        const currentBalance = Number(wallet.balance);
-        wallet.balance = currentBalance + dto.amount;
+        // Atomic increment — PostgreSQL locks the row and computes inline,
+        // so concurrent requests always see a consistent balance.
+        await entityManager.query(
+          'UPDATE "wallets" SET "balance" = CAST("balance" AS numeric(15,2)) + $1 WHERE "id" = $2',
+          [dto.amount, wallet.id],
+        );
+
+        // Re-fetch to get the updated balance from the DB
+        const updatedWallet = await entityManager.findOne(Wallet, {
+          where: { id: wallet.id },
+        });
 
         const transaction = entityManager.create(Transaction, {
           walletId: wallet.id,
@@ -203,19 +219,19 @@ export class WalletService {
           transactionStatus: TransactionStatus.COMPLETED,
         });
 
-        await entityManager.save(wallet);
         await entityManager.save(transaction);
 
         this.logger.log(`Deposit of ${dto.amount} to wallet ${wallet.id} (ref: ${reference})`);
 
-        return { wallet, transaction };
+        return { wallet: updatedWallet!, transaction };
       },
     );
   }
 
   /**
    * POST /wallets/withdraw
-   * Withdraw funds from a wallet
+   * Withdraw funds from a wallet — uses atomic SQL decrement with an
+   * inline balance guard to prevent overspending under race.
    */
   async withdraw(
     user: { sub: string; role: Role },
@@ -224,19 +240,27 @@ export class WalletService {
     this.assertMerchantRole(user.role);
 
     const wallet = await this.getWalletById(dto.walletId, user);
-    await this.assertOwnsWallet(user.sub, wallet);
-
-    // Validate sufficient balance
-    const currentBalance = Number(wallet.balance);
-    if (currentBalance < dto.amount) {
-      throw new BadRequestException('Insufficient wallet balance');
-    }
+    // Ownership is enforced inside getWalletById
 
     const reference = dto.reference || this.generateReference('WTH');
 
     return this.walletRepository.manager.transaction(
       async (entityManager) => {
-        wallet.balance = currentBalance - dto.amount;
+        // Atomic decrement with inline guard: UPDATE returns 0 rows
+        // when balance < amount, preventing concurrent overspend.
+        const result: any[] = await entityManager.query(
+          'UPDATE "wallets" SET "balance" = CAST("balance" AS numeric(15,2)) - $1 WHERE "id" = $2 AND "balance" >= $1',
+          [dto.amount, wallet.id],
+        );
+
+        if (result.length === 0) {
+          throw new BadRequestException('Insufficient wallet balance');
+        }
+
+        // Re-fetch to get the updated balance from the DB
+        const updatedWallet = await entityManager.findOne(Wallet, {
+          where: { id: wallet.id },
+        });
 
         const transaction = entityManager.create(Transaction, {
           walletId: wallet.id,
@@ -248,12 +272,11 @@ export class WalletService {
           transactionStatus: TransactionStatus.COMPLETED,
         });
 
-        await entityManager.save(wallet);
         await entityManager.save(transaction);
 
         this.logger.log(`Withdraw of ${dto.amount} from wallet ${wallet.id} (ref: ${reference})`);
 
-        return { wallet, transaction };
+        return { wallet: updatedWallet!, transaction };
       },
     );
   }
@@ -284,7 +307,8 @@ export class WalletService {
 
   /**
    * POST /wallets/transfer
-   * Transfer funds between wallets
+   * Transfer funds between two wallets — uses atomic SQL increments /
+   * decrements to prevent race conditions on both source and destination.
    */
   async transfer(
     user: { sub: string; role: Role },
@@ -292,20 +316,21 @@ export class WalletService {
   ): Promise<TransferResponseDto> {
     this.assertMerchantRole(user.role);
 
-    if (dto.sourceWalletId === dto.destinationWalletId) {
-      throw new BadRequestException('Source and destination wallets must be different');
+    const sourceWallet = await this.getWalletById(dto.sourceWalletId, user);
+    // Ownership of source wallet is enforced inside getWalletById.
+    // Destination wallet is looked up directly (no ownership check) because
+    // transfers can target any wallet (e.g. paying a staff member).
+    const destWallet = await this.walletRepository.findOne({
+      where: { id: dto.destinationWalletId },
+    });
+
+    if (!destWallet) {
+      throw new NotFoundException('Destination wallet not found');
     }
 
-    const sourceWallet = await this.getWalletById(dto.sourceWalletId, user);
-    const destWallet = await this.getWalletById(dto.destinationWalletId, user);
-
-    // Verify ownership of source wallet
-    await this.assertOwnsWallet(user.sub, sourceWallet);
-
-    // Validate source wallet has sufficient balance
-    const sourceBalance = Number(sourceWallet.balance);
-    if (sourceBalance < dto.amount) {
-      throw new BadRequestException('Insufficient balance in source wallet');
+    // Prevent self-transfer
+    if (dto.sourceWalletId === dto.destinationWalletId) {
+      throw new BadRequestException('Source and destination wallets must be different');
     }
 
     const sourceRef = this.generateReference('TRF_OUT');
@@ -313,8 +338,29 @@ export class WalletService {
 
     return this.walletRepository.manager.transaction(
       async (entityManager) => {
-        // Debit source wallet
-        sourceWallet.balance = sourceBalance - dto.amount;
+        // Source: atomic decrement with inline guard
+        const srcResult: any[] = await entityManager.query(
+          'UPDATE "wallets" SET "balance" = CAST("balance" AS numeric(15,2)) - $1 WHERE "id" = $2 AND "balance" >= $1',
+          [dto.amount, sourceWallet.id],
+        );
+
+        if (srcResult.length === 0) {
+          throw new BadRequestException('Insufficient balance in source wallet');
+        }
+
+        // Destination: atomic increment (no guard needed)
+        await entityManager.query(
+          'UPDATE "wallets" SET "balance" = CAST("balance" AS numeric(15,2)) + $1 WHERE "id" = $2',
+          [dto.amount, destWallet.id],
+        );
+
+        // Re-fetch both wallets for the response
+        const updatedSource = await entityManager.findOne(Wallet, {
+          where: { id: sourceWallet.id },
+        });
+        const updatedDest = await entityManager.findOne(Wallet, {
+          where: { id: destWallet.id },
+        });
 
         const sourceTx = entityManager.create(Transaction, {
           walletId: sourceWallet.id,
@@ -322,13 +368,9 @@ export class WalletService {
           amount: dto.amount,
           fee: 0,
           reference: sourceRef,
-          description: dto.description || `Transfer to wallet ${destWallet.id}`,
+          description: dto.description || null,
           transactionStatus: TransactionStatus.COMPLETED,
         });
-
-        // Credit destination wallet
-        const destBalance = Number(destWallet.balance);
-        destWallet.balance = destBalance + dto.amount;
 
         const destTx = entityManager.create(Transaction, {
           walletId: destWallet.id,
@@ -336,12 +378,10 @@ export class WalletService {
           amount: dto.amount,
           fee: 0,
           reference: destRef,
-          description: dto.description || `Transfer from wallet ${sourceWallet.id}`,
+          description: dto.description || null,
           transactionStatus: TransactionStatus.COMPLETED,
         });
 
-        await entityManager.save(sourceWallet);
-        await entityManager.save(destWallet);
         await entityManager.save(sourceTx);
         await entityManager.save(destTx);
 
@@ -350,8 +390,8 @@ export class WalletService {
         );
 
         return {
-          sourceWallet,
-          destWallet,
+          sourceWallet: updatedSource!,
+          destWallet: updatedDest!,
           sourceTx,
           destTx,
         };

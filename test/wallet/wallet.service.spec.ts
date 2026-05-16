@@ -233,12 +233,15 @@ describe('WalletService', () => {
     it('should deposit funds and create transaction', async () => {
       const mockWallet = createMockWallet({ balance: 1000 });
       mockWalletRepository.findOne.mockResolvedValue(mockWallet);
-      mockEntityManager.findOne.mockResolvedValue(mockMerchant);
 
-      // Mock entityManager.transaction
-      (mockEntityManager.transaction as jest.Mock).mockImplementation(async (cb: (em: typeof mockEntityManager) => Promise<unknown>) => {
-        return cb(mockEntityManager);
-      });
+      (mockEntityManager.transaction).mockImplementation(async (cb: (em: typeof mockEntityManager) => Promise<unknown>) => cb(mockEntityManager));
+      // Atomic SQL increment — not checked for deposit (no guard needed)
+      mockEntityManager.query.mockResolvedValue([]);
+      // Sequence: 1st entityManager.findOne = assertOwnsWallet merchant lookup,
+      //            2nd = wallet re-fetch inside transaction
+      mockEntityManager.findOne
+        .mockResolvedValueOnce(mockMerchant)
+        .mockResolvedValueOnce(createMockWallet({ balance: 1500 }));
       mockEntityManager.save.mockResolvedValue(undefined);
 
       const dto = {
@@ -253,13 +256,21 @@ describe('WalletService', () => {
       expect(result.wallet.balance).toBe(1500);
       expect(result.transaction.type).toBe(TransactionType.DEPOSIT);
       expect(result.transaction.transactionStatus).toBe(TransactionStatus.COMPLETED);
+      // Verify atomic SQL was used (not in-memory save)
+      expect(mockEntityManager.query).toHaveBeenCalledWith(
+        expect.stringContaining('UPDATE "wallets"'),
+        [500, 'wallet-uuid'],
+      );
     });
 
     it('should generate reference when not provided', async () => {
       const mockWallet = createMockWallet({ balance: 1000 });
       mockWalletRepository.findOne.mockResolvedValue(mockWallet);
-      mockEntityManager.findOne.mockResolvedValue(mockMerchant);
-      (mockEntityManager.transaction as jest.Mock).mockImplementation(async (cb: (em: typeof mockEntityManager) => Promise<unknown>) => cb(mockEntityManager));
+      (mockEntityManager.transaction).mockImplementation(async (cb: (em: typeof mockEntityManager) => Promise<unknown>) => cb(mockEntityManager));
+      mockEntityManager.query.mockResolvedValue([]);
+      mockEntityManager.findOne
+        .mockResolvedValueOnce(mockMerchant)
+        .mockResolvedValueOnce(createMockWallet({ balance: 1500 }));
       mockEntityManager.save.mockResolvedValue(undefined);
 
       const dto = { walletId: 'wallet-uuid', amount: 500 };
@@ -291,8 +302,13 @@ describe('WalletService', () => {
     it('should withdraw funds and create transaction', async () => {
       const mockWallet = createMockWallet({ balance: 2000 });
       mockWalletRepository.findOne.mockResolvedValue(mockWallet);
-      mockEntityManager.findOne.mockResolvedValue(mockMerchant);
-      (mockEntityManager.transaction as jest.Mock).mockImplementation(async (cb: (em: typeof mockEntityManager) => Promise<unknown>) => cb(mockEntityManager));
+      (mockEntityManager.transaction).mockImplementation(async (cb: (em: typeof mockEntityManager) => Promise<unknown>) => cb(mockEntityManager));
+      // Atomic SQL decrement — 1 row affected (guard passes)
+      mockEntityManager.query.mockResolvedValue([{}]);
+      // Sequence: 1st findOne = assertOwnsWallet (merchant), 2nd = tx re-fetch
+      mockEntityManager.findOne
+        .mockResolvedValueOnce(mockMerchant)
+        .mockResolvedValueOnce(createMockWallet({ balance: 1500 }));
       mockEntityManager.save.mockResolvedValue(undefined);
 
       const dto = {
@@ -306,12 +322,20 @@ describe('WalletService', () => {
 
       expect(result.wallet.balance).toBe(1500);
       expect(result.transaction.type).toBe(TransactionType.WITHDRAW);
+      // Verify atomic SQL with guard was used
+      expect(mockEntityManager.query).toHaveBeenCalledWith(
+        expect.stringContaining('UPDATE "wallets"'),
+        [500, 'wallet-uuid'],
+      );
     });
 
     it('should throw BadRequestException for insufficient balance', async () => {
       const mockWallet = createMockWallet({ balance: 100 });
       mockWalletRepository.findOne.mockResolvedValue(mockWallet);
-      mockEntityManager.findOne.mockResolvedValue(mockMerchant);
+      (mockEntityManager.transaction).mockImplementation(async (cb: (em: typeof mockEntityManager) => Promise<unknown>) => cb(mockEntityManager));
+      mockEntityManager.findOne.mockResolvedValueOnce(mockMerchant);
+      // Atomic SQL decrement — 0 rows affected (guard fails because balance < amount)
+      mockEntityManager.query.mockResolvedValue([]);
 
       const dto = { walletId: 'wallet-uuid', amount: 500 };
 
@@ -323,8 +347,11 @@ describe('WalletService', () => {
     it('should generate reference when not provided', async () => {
       const mockWallet = createMockWallet({ balance: 2000 });
       mockWalletRepository.findOne.mockResolvedValue(mockWallet);
-      mockEntityManager.findOne.mockResolvedValue(mockMerchant);
-      (mockEntityManager.transaction as jest.Mock).mockImplementation(async (cb: (em: typeof mockEntityManager) => Promise<unknown>) => cb(mockEntityManager));
+      (mockEntityManager.transaction).mockImplementation(async (cb: (em: typeof mockEntityManager) => Promise<unknown>) => cb(mockEntityManager));
+      mockEntityManager.query.mockResolvedValue([{}]);
+      mockEntityManager.findOne
+        .mockResolvedValueOnce(mockMerchant)
+        .mockResolvedValueOnce(createMockWallet({ balance: 1500 }));
       mockEntityManager.save.mockResolvedValue(undefined);
 
       const dto = { walletId: 'wallet-uuid', amount: 500 };
@@ -395,15 +422,24 @@ describe('WalletService', () => {
       });
 
       mockWalletRepository.findOne
-        .mockResolvedValueOnce(sourceWallet)  // first call: source
-        .mockResolvedValueOnce(destWallet);   // second call: dest
+        .mockResolvedValueOnce(sourceWallet)
+        .mockResolvedValueOnce(destWallet);
 
-      mockEntityManager.findOne.mockResolvedValue(mockMerchant);
-      (mockEntityManager.transaction as jest.Mock).mockImplementation(async (cb: (em: typeof mockEntityManager) => Promise<unknown>) => cb(mockEntityManager));
+      (mockEntityManager.transaction).mockImplementation(async (cb: (em: typeof mockEntityManager) => Promise<unknown>) => cb(mockEntityManager));
+      // Atomic SQL: source decrement succeeds (1 row), dest increment (no check)
+      mockEntityManager.query
+        .mockResolvedValueOnce([{}])
+        .mockResolvedValueOnce([]);
       mockEntityManager.create
         .mockReturnValueOnce(createMockTransaction({ type: TransactionType.TRANSFER_OUT, reference: 'TRF_OUT-1' }))
         .mockReturnValueOnce(createMockTransaction({ type: TransactionType.TRANSFER_IN, reference: 'TRF_IN-1' }));
       mockEntityManager.save.mockResolvedValue(undefined);
+      // Sequence: 1st findOne = assertOwnsWallet (merchant lookup),
+      //            2nd = source wallet re-fetch, 3rd = dest wallet re-fetch
+      mockEntityManager.findOne
+        .mockResolvedValueOnce(mockMerchant)
+        .mockResolvedValueOnce(createMockWallet({ id: 'source-uuid', balance: 2000 }))
+        .mockResolvedValueOnce(createMockWallet({ id: 'dest-uuid', merchantId: 'merchant-2', balance: 2000 }));
 
       const dto = {
         sourceWalletId: 'source-uuid',
@@ -418,6 +454,11 @@ describe('WalletService', () => {
       expect(result.destWallet.balance).toBe(2000);
       expect(result.sourceTx.type).toBe(TransactionType.TRANSFER_OUT);
       expect(result.destTx.type).toBe(TransactionType.TRANSFER_IN);
+      // Verify atomic SQL with guard on source
+      expect(mockEntityManager.query).toHaveBeenNthCalledWith(1,
+        expect.stringContaining('UPDATE "wallets"'),
+        [1000, 'source-uuid'],
+      );
     });
 
     it('should throw BadRequestException when source and destination are the same', async () => {
@@ -447,7 +488,10 @@ describe('WalletService', () => {
         .mockResolvedValueOnce(sourceWallet)
         .mockResolvedValueOnce(destWallet);
 
-      mockEntityManager.findOne.mockResolvedValue(mockMerchant);
+      (mockEntityManager.transaction).mockImplementation(async (cb: (em: typeof mockEntityManager) => Promise<unknown>) => cb(mockEntityManager));
+      mockEntityManager.findOne.mockResolvedValueOnce(mockMerchant);
+      // Atomic SQL on source returns 0 rows — guard fails, no need for dest mock
+      mockEntityManager.query.mockResolvedValue([]);
 
       const dto = {
         sourceWalletId: 'source-uuid',

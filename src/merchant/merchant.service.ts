@@ -213,10 +213,10 @@ export class MerchantService {
       .from('staff_profiles', 'sp')
       .where('sp."merchantId" = :merchantId', { merchantId })
       .getRawOne()
-      .then(r => parseInt(r.count, 10));
+      .then((r: { count: string }) => parseInt(r.count, 10));
 
     // Query wallet balance for this merchant
-    const walletResult = await this.merchantRepository.manager.query(
+    const walletResult: { balance: string }[] = await this.merchantRepository.manager.query(
       'SELECT balance FROM wallets WHERE "merchantId" = $1 LIMIT 1',
       [merchantId],
     );
