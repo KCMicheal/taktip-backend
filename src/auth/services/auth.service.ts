@@ -24,12 +24,15 @@ import { MailService } from './mail.service';
 import { TokenService, TokenPair } from './token.service';
 import { Role } from '../enums/role.enum';
 import { MerchantService } from '../../merchant/merchant.service';
+import { enumToString } from '../../common/helpers/enum-helper';
 
 export interface UserResponse {
   sub: string;
   email: string;
   phone: string | null;
-  role: Role;
+  firstName: string | null;
+  lastName: string | null;
+  role: string;
   isVerified: boolean;
 }
 
@@ -202,7 +205,9 @@ export class AuthService {
       sub: user.id,
       email: user.email,
       phone: user.phone,
-      role: user.role,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: enumToString(Role, user.role) ?? 'UNKNOWN',
       isVerified: user.isEmailVerified,
     };
   }

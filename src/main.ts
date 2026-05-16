@@ -45,6 +45,18 @@ const responseSchemas: Record<string, SchemaObject> = {
       accessToken: { type: 'string', example: 'eyJhbGciOiJFZERTQSJ9...' },
       refreshToken: { type: 'string', example: 'eyJhbGciOiJFZERTQSJ9...' },
       expiresIn: { type: 'number', example: 900 },
+      user: {
+        type: 'object',
+        properties: {
+          sub: { type: 'string', format: 'uuid' },
+          email: { type: 'string', example: 'user@example.com' },
+          phone: { type: 'string', nullable: true },
+          firstName: { type: 'string', nullable: true, example: 'John' },
+          lastName: { type: 'string', nullable: true, example: 'Doe' },
+          role: { type: 'string', example: 'MERCHANT' },
+          isVerified: { type: 'boolean' },
+        },
+      },
     },
   },
   RefreshTokenResponseDto: {

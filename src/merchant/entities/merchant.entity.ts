@@ -22,6 +22,24 @@ export class Merchant extends BaseEntity {
   address: string | null;
 
   @Column({ type: 'varchar', nullable: true })
+  email: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  phone: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  city: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  state: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  zip: string | null;
+
+  @Column({ type: 'varchar', nullable: true, default: 'NG' })
+  country: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
   description: string | null;
 
   @Column({ type: 'varchar', nullable: true })

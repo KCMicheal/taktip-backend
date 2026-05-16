@@ -22,6 +22,24 @@ class UpdateMerchantDto {
   @ApiPropertyOptional({ description: 'Business address' })
   address?: string;
 
+  @ApiPropertyOptional({ description: 'Business email' })
+  email?: string;
+
+  @ApiPropertyOptional({ description: 'Business phone number' })
+  phone?: string;
+
+  @ApiPropertyOptional({ description: 'Business city' })
+  city?: string;
+
+  @ApiPropertyOptional({ description: 'Business state' })
+  state?: string;
+
+  @ApiPropertyOptional({ description: 'Business zip/postal code' })
+  zip?: string;
+
+  @ApiPropertyOptional({ description: 'Business country code', example: 'NG' })
+  country?: string;
+
   @ApiPropertyOptional({ description: 'Business description' })
   description?: string;
 
@@ -145,5 +163,50 @@ export class MerchantController {
 
     const invites = await this.inviteService.getMerchantInvites(merchantId, user.sub);
     return { status: 'success', data: invites };
+  }
+
+  @Get(':merchantId/summary')
+  @ApiOperation({
+    summary: 'Get merchant summary for account deletion check',
+    description:
+      'Returns staffCount, walletBalance, pendingTips, and activeSubscriptions. ' +
+      'Used on the merchant Settings page to show requirements before account deletion.',
+  })
+  @ApiParam({ name: 'merchantId', description: 'Merchant UUID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Merchant summary data',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            staffCount: { type: 'number', example: 5 },
+            walletBalance: { type: 'number', example: 0, description: 'Phase B — Wallet module' },
+            pendingTips: { type: 'number', example: 0, description: 'Phase C — Tipping module' },
+            activeSubscriptions: { type: 'number', example: 0, description: 'Subscription module' },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 403, description: 'Not authorized to view this merchant' })
+  @ApiResponse({ status: 404, description: 'Merchant not found' })
+  async getMerchantSummary(
+    @Param('merchantId', ParseUUIDPipe) merchantId: string,
+    @CurrentUser() user: { sub: string },
+  ) {
+    // Get the merchant to check ownership
+    const merchant = await this.merchantService.getMerchantById(merchantId);
+
+    // Check if the current user owns this merchant or is admin
+    if (merchant.ownerId !== user.sub) {
+      throw new ForbiddenException('Not authorized to view this merchant');
+    }
+
+    const summary = await this.merchantService.getMerchantSummary(merchantId);
+    return { status: 'success', data: summary };
   }
 }

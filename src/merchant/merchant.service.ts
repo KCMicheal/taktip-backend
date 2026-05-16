@@ -159,6 +159,12 @@ export class MerchantService {
       name?: string;
       businessType?: BusinessType;
       address?: string;
+      email?: string;
+      phone?: string;
+      city?: string;
+      state?: string;
+      zip?: string;
+      country?: string;
       description?: string;
       logoUrl?: string;
       currency?: string;
@@ -171,11 +177,49 @@ export class MerchantService {
     if (updates.name !== undefined) merchant.name = updates.name;
     if (updates.businessType !== undefined) merchant.businessType = updates.businessType;
     if (updates.address !== undefined) merchant.address = updates.address;
+    if (updates.email !== undefined) merchant.email = updates.email;
+    if (updates.phone !== undefined) merchant.phone = updates.phone;
+    if (updates.city !== undefined) merchant.city = updates.city;
+    if (updates.state !== undefined) merchant.state = updates.state;
+    if (updates.zip !== undefined) merchant.zip = updates.zip;
+    if (updates.country !== undefined) merchant.country = updates.country;
     if (updates.description !== undefined) merchant.description = updates.description;
     if (updates.logoUrl !== undefined) merchant.logoUrl = updates.logoUrl;
     if (updates.currency !== undefined) merchant.currency = updates.currency;
     if (updates.timezone !== undefined) merchant.timezone = updates.timezone;
 
     return this.merchantRepository.save(merchant);
+  }
+
+  /**
+   * Get merchant summary for settings/account deletion page
+   *
+   * Stage 1: staffCount is real; walletBalance, pendingTips, activeSubscriptions
+   * are placeholders (zero) until Wallet/Tipping/Subscription modules are built.
+   */
+  async getMerchantSummary(merchantId: string): Promise<{
+    staffCount: number;
+    walletBalance: number;
+    pendingTips: number;
+    activeSubscriptions: number;
+  }> {
+    // Verify merchant exists
+    await this.getMerchantById(merchantId);
+
+    // Count staff profiles for this merchant
+    const staffCount = await this.merchantRepository.manager
+      .createQueryBuilder()
+      .select('COUNT(*)', 'count')
+      .from('staff_profiles', 'sp')
+      .where('sp."merchantId" = :merchantId', { merchantId })
+      .getRawOne()
+      .then(r => parseInt(r.count, 10));
+
+    return {
+      staffCount,
+      walletBalance: 0, // TODO: Phase B — Wallet module
+      pendingTips: 0,   // TODO: Phase C — Tipping module
+      activeSubscriptions: 0, // TODO: Subscription module
+    };
   }
 }
