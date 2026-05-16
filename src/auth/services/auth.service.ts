@@ -24,6 +24,7 @@ import { MailService } from './mail.service';
 import { TokenService, TokenPair } from './token.service';
 import { Role } from '../enums/role.enum';
 import { MerchantService } from '../../merchant/merchant.service';
+import { enumToString } from '../../common/helpers/enum-helper';
 
 export interface UserResponse {
   sub: string;
@@ -31,7 +32,7 @@ export interface UserResponse {
   phone: string | null;
   firstName: string | null;
   lastName: string | null;
-  role: Role;
+  role: string;
   isVerified: boolean;
 }
 
@@ -206,7 +207,7 @@ export class AuthService {
       phone: user.phone,
       firstName: user.firstName,
       lastName: user.lastName,
-      role: user.role,
+      role: enumToString(Role, user.role) ?? 'UNKNOWN',
       isVerified: user.isEmailVerified,
     };
   }

@@ -9,3 +9,21 @@ export function swaggerEnumValues(enumObj: object): string[] {
     (v): v is string => typeof v === 'string',
   );
 }
+
+/**
+ * Convert a numeric enum value to its string key name.
+ * e.g., Role[2] → "MERCHANT"
+ */
+export function enumToString(enumObj: Record<string, unknown>, value: number): string | undefined {
+  const key = enumObj[value];
+  return typeof key === 'string' ? key : undefined;
+}
+
+/**
+ * Convert a string enum key name to its numeric value.
+ * e.g., Role["MERCHANT"] → 2
+ */
+export function stringToEnum(enumObj: Record<string, unknown>, key: string): number | undefined {
+  const value = enumObj[key];
+  return typeof value === 'number' ? value : undefined;
+}
