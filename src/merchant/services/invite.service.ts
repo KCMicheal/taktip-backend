@@ -83,41 +83,40 @@ export class InviteService {
       throw new NotFoundException('Merchant not found');
     }
 
-    // Check if user with this email already exists
-    const existingUser = await this.userRepository.findOne({
-      where: { email: dto.email },
-    });
-
-    if (existingUser) {
-      // Check if they're already a member of this merchant
-      // For now, just check if there's an existing pending invite
-      const existingInvite = await this.inviteRepository.findOne({
-        where: {
-          email: dto.email,
-          merchantId,
-          status: InviteStatus.PENDING,
-        },
-      });
-
-      if (existingInvite) {
-        throw new BadRequestException('An invite has already been sent to this email');
-      }
-
-      // User exists - they can be added directly (future: link to merchant)
-      // For now, we'll create an invite that will link to their existing account
-    }
-
-    // Check for existing pending invite
-    const existingPendingInvite = await this.inviteRepository.findOne({
+    // Check for existing invite (any status)
+    const existingInvite = await this.inviteRepository.findOne({
       where: {
         email: dto.email,
         merchantId,
-        status: InviteStatus.PENDING,
       },
     });
 
-    if (existingPendingInvite) {
-      throw new BadRequestException('An invite is already pending for this email');
+    if (existingInvite) {
+      // If already pending, reject
+      if (existingInvite.status === InviteStatus.PENDING) {
+        throw new BadRequestException('An invite is already pending for this email');
+      }
+
+      // Otherwise, update the existing invite (cancelled, expired, accepted, etc.)
+      const token = this.generateToken();
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 24);
+
+      existingInvite.token = token;
+      existingInvite.expiresAt = expiresAt;
+      existingInvite.status = InviteStatus.PENDING;
+      existingInvite.role = dto.role || 'STAFF';
+      existingInvite.name = dto.name || null;
+      // Clear acceptedAt if it was accepted before
+      existingInvite.acceptedAt = null;
+      existingInvite.inviteeId = null;
+
+      const savedInvite = await this.inviteRepository.save(existingInvite);
+
+      // Send invite email
+      await this.sendInviteEmail(dto.email, token, merchant.name);
+
+      return savedInvite;
     }
 
     // Generate token and set expiry (24 hours)
