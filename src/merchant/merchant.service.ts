@@ -215,9 +215,17 @@ export class MerchantService {
       .getRawOne()
       .then(r => parseInt(r.count, 10));
 
+    // Query wallet balance for this merchant
+    const walletResult = await this.merchantRepository.manager.query(
+      'SELECT balance FROM wallets WHERE "merchantId" = $1 LIMIT 1',
+      [merchantId],
+    );
+    const walletBalance =
+      walletResult.length > 0 ? parseFloat(walletResult[0].balance) : 0;
+
     return {
       staffCount,
-      walletBalance: 0, // TODO: Phase B — Wallet module
+      walletBalance,
       pendingTips: 0,   // TODO: Phase C — Tipping module
       activeSubscriptions: 0, // TODO: Subscription module
     };

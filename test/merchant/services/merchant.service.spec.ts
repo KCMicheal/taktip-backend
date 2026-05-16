@@ -38,6 +38,7 @@ describe('MerchantService', () => {
 
   const mockManager = {
     createQueryBuilder: jest.fn(() => mockQueryBuilder),
+    query: jest.fn().mockResolvedValue([]),
   };
 
   beforeEach(async () => {
@@ -73,6 +74,10 @@ describe('MerchantService', () => {
       expect(result.pendingTips).toBe(0);
       expect(result.activeSubscriptions).toBe(0);
       expect(mockManager.createQueryBuilder).toHaveBeenCalled();
+      expect(mockManager.query).toHaveBeenCalledWith(
+        'SELECT balance FROM wallets WHERE "merchantId" = $1 LIMIT 1',
+        ['merchant-uuid'],
+      );
     });
 
     it('should throw NotFoundException if merchant not found', async () => {

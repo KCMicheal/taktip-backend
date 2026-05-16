@@ -7,6 +7,7 @@ import { APP_GUARD, APP_INTERCEPTOR, APP_FILTER } from '@nestjs/core';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { StaffModule } from './staff/staff.module';
+import { WalletModule } from './wallet/wallet.module';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 
@@ -64,6 +65,7 @@ import { GlobalExceptionFilter } from './common/filters/global-exception.filter'
     AuthModule,
     HealthModule,
     StaffModule,
+    WalletModule,
   ],
   controllers: [],
   providers: [
