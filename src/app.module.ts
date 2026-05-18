@@ -8,6 +8,7 @@ import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { StaffModule } from './staff/staff.module';
 import { WalletModule } from './wallet/wallet.module';
+import { CustomerModule } from './customer/customer.module';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 
@@ -66,6 +67,7 @@ import { GlobalExceptionFilter } from './common/filters/global-exception.filter'
     HealthModule,
     StaffModule,
     WalletModule,
+    CustomerModule,
   ],
   controllers: [],
   providers: [

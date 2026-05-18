@@ -14,6 +14,7 @@ import { TransactionType } from '../../src/wallet/enums/transaction-type.enum';
 import { TransactionStatus } from '../../src/wallet/enums/transaction-status.enum';
 import { Role } from '../../src/auth/enums/role.enum';
 import { StaffProfile } from '../../src/staff/entities/staff-profile.entity';
+import { CustomerProfile } from '../../src/customer/entities/customer-profile.entity';
 
 describe('WalletService', () => {
   let service: WalletService;
@@ -51,10 +52,22 @@ describe('WalletService', () => {
     save: jest.fn(),
   };
 
+  const mockCustomerProfileRepository = {
+    findOne: jest.fn(),
+    find: jest.fn(),
+    create: jest.fn(),
+    save: jest.fn(),
+  };
+
   const mockMerchant = {
     id: 'merchant-uuid',
     ownerId: 'user-uuid',
     name: 'Test Merchant',
+  };
+
+  const mockCustomerProfile = {
+    id: 'customer-profile-uuid',
+    userId: 'user-uuid',
   };
 
   const createMockWallet = (overrides: Partial<Wallet> = {}): Wallet => {
@@ -114,6 +127,10 @@ describe('WalletService', () => {
         {
           provide: getRepositoryToken(StaffProfile),
           useValue: mockStaffProfileRepository,
+        },
+        {
+          provide: getRepositoryToken(CustomerProfile),
+          useValue: mockCustomerProfileRepository,
         },
       ],
     }).compile();
@@ -551,6 +568,188 @@ describe('WalletService', () => {
       await expect(
         service.transfer({ sub: 'user-uuid', role: Role.CUSTOMER }, dto),
       ).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('createCustomerWallet', () => {
+    it('should create a customer wallet', async () => {
+      mockWalletRepository.findOne.mockResolvedValue(null); // no existing wallet
+      mockWalletRepository.create.mockReturnValue(
+        createMockWallet({ ownerId: 'cp-uuid', ownerType: 'customer' }),
+      );
+      mockWalletRepository.save.mockResolvedValue(
+        createMockWallet({ ownerId: 'cp-uuid', ownerType: 'customer' }),
+      );
+
+      const result = await service.createCustomerWallet('cp-uuid');
+
+      expect(result).toBeDefined();
+      expect(result.ownerId).toBe('cp-uuid');
+      expect(result.ownerType).toBe('customer');
+    });
+
+    it('should return existing wallet if already exists (idempotent)', async () => {
+      const existing = createMockWallet({ ownerId: 'cp-uuid', ownerType: 'customer' });
+      mockWalletRepository.findOne.mockResolvedValue(existing);
+
+      const result = await service.createCustomerWallet('cp-uuid');
+
+      expect(result).toBe(existing);
+      expect(mockWalletRepository.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('findCustomerWallet', () => {
+    it('should return the wallet when found', async () => {
+      const wallet = createMockWallet({ ownerId: 'cp-uuid', ownerType: 'customer' });
+      mockWalletRepository.findOne.mockResolvedValue(wallet);
+
+      const result = await service.findCustomerWallet('cp-uuid');
+
+      expect(result).toEqual(wallet);
+    });
+
+    it('should return null when no wallet exists', async () => {
+      mockWalletRepository.findOne.mockResolvedValue(null);
+
+      const result = await service.findCustomerWallet('cp-uuid');
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('getCustomerWallet', () => {
+    it('should return the wallet when found', async () => {
+      const wallet = createMockWallet({ ownerId: 'cp-uuid', ownerType: 'customer' });
+      mockWalletRepository.findOne.mockResolvedValue(wallet);
+
+      const result = await service.getCustomerWallet('cp-uuid');
+
+      expect(result).toEqual(wallet);
+    });
+
+    it('should throw NotFoundException when no wallet exists', async () => {
+      mockWalletRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.getCustomerWallet('cp-uuid')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('getOrCreateCustomerWallet', () => {
+    it('should return existing wallet if found', async () => {
+      const wallet = createMockWallet({ ownerId: 'cp-uuid', ownerType: 'customer' });
+      jest.spyOn(service, 'findCustomerWallet').mockResolvedValue(wallet);
+
+      const result = await service.getOrCreateCustomerWallet('cp-uuid');
+
+      expect(result).toEqual(wallet);
+    });
+
+    it('should create a new wallet if none exists', async () => {
+      jest.spyOn(service, 'findCustomerWallet').mockResolvedValue(null);
+      const newWallet = createMockWallet({ ownerId: 'cp-uuid', ownerType: 'customer' });
+      jest.spyOn(service, 'createCustomerWallet').mockResolvedValue(newWallet);
+
+      const result = await service.getOrCreateCustomerWallet('cp-uuid');
+
+      expect(result).toEqual(newWallet);
+    });
+  });
+
+  describe('getOrCreatePlatformWallet', () => {
+    it('should return existing platform wallet', async () => {
+      const platformWallet = createMockWallet({
+        ownerId: 'platform-fee-wallet',
+        ownerType: 'system',
+      });
+      mockWalletRepository.findOne.mockResolvedValue(platformWallet);
+
+      const result = await service.getOrCreatePlatformWallet();
+
+      expect(result).toEqual(platformWallet);
+    });
+
+    it('should create platform wallet if none exists', async () => {
+      mockWalletRepository.findOne.mockResolvedValue(null);
+      mockWalletRepository.create.mockReturnValue(
+        createMockWallet({ ownerId: 'platform-fee-wallet', ownerType: 'system' }),
+      );
+      mockWalletRepository.save.mockResolvedValue(
+        createMockWallet({ ownerId: 'platform-fee-wallet', ownerType: 'system' }),
+      );
+
+      const result = await service.getOrCreatePlatformWallet();
+
+      expect(result).toBeDefined();
+      expect(result.ownerId).toBe('platform-fee-wallet');
+    });
+  });
+
+  describe('tipFromBalance', () => {
+    const customerWallet = createMockWallet({
+      id: 'customer-wallet-uuid',
+      ownerId: 'customer-profile-uuid',
+      ownerType: 'customer',
+      balanceAvailable: 1000,
+    });
+    const staffWallet = createMockWallet({
+      id: 'staff-wallet-uuid',
+      ownerId: 'staff-profile-uuid',
+      ownerType: 'staff',
+      balanceAvailable: 500,
+    });
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      // Set up default mocks for the platform wallet
+      mockWalletRepository.findOne.mockResolvedValue(null); // no platform wallet yet
+      // Mock entityManager create
+      mockEntityManager.create.mockImplementation(
+        (_entityClass: unknown, data: Record<string, unknown>) => ({
+          ...createMockTransaction(),
+          ...data,
+        }),
+      );
+      mockEntityManager.save.mockResolvedValue(undefined);
+    });
+
+    it('should tip staff and deduct 5% platform fee', async () => {
+      (mockEntityManager.transaction).mockImplementation(async (cb: (em: typeof mockEntityManager) => Promise<unknown>) => cb(mockEntityManager));
+      // Atomic SQL: customer debit succeeds
+      mockEntityManager.query
+        .mockResolvedValueOnce([{}])  // customer debit (1 row)
+        .mockResolvedValueOnce([])     // staff credit
+        .mockResolvedValueOnce([]);    // platform fee credit
+      // Re-fetch wallets
+      mockEntityManager.findOne
+        .mockResolvedValueOnce(createMockWallet({ id: 'customer-wallet-uuid', balanceAvailable: 500 }))
+        .mockResolvedValueOnce(createMockWallet({ id: 'staff-wallet-uuid', balanceAvailable: 975 }))
+        .mockResolvedValueOnce(createMockWallet({ id: 'platform-fee-wallet', ownerId: 'platform-fee-wallet', ownerType: 'system', balanceAvailable: 25 }));
+
+      const result = await service.tipFromBalance('customer-wallet-uuid', 'staff-wallet-uuid', 500);
+
+      expect(result.tipOutTx).toBeDefined();
+      expect(result.tipInTx).toBeDefined();
+      expect(result.feeTx).toBeDefined();
+      expect(result.tipOutTx.type).toBe(TransactionType.TIP_OUT);
+      expect(result.tipInTx.type).toBe(TransactionType.TIP_IN);
+      expect(result.feeTx.type).toBe(TransactionType.FEE);
+    });
+
+    it('should throw BadRequestException for self-tip', async () => {
+      await expect(
+        service.tipFromBalance('same-wallet-uuid', 'same-wallet-uuid', 100),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException for insufficient customer balance', async () => {
+      (mockEntityManager.transaction).mockImplementation(async (cb: (em: typeof mockEntityManager) => Promise<unknown>) => cb(mockEntityManager));
+      // Atomic SQL guard returns 0 rows — insufficient balance
+      mockEntityManager.query.mockResolvedValue([]);
+
+      await expect(
+        service.tipFromBalance('customer-wallet-uuid', 'staff-wallet-uuid', 99999),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 });
