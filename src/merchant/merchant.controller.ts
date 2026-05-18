@@ -122,32 +122,7 @@ export class MerchantController {
   @Get(':merchantId/summary')
   @ApiOperation({
     summary: 'Get merchant summary for account deletion check',
-    description:
-      'Returns staffCount, walletBalance, pendingTips, and activeSubscriptions. ' +
-      'Used on the merchant Settings page to show requirements before account deletion.',
-  })
-  @ApiParam({ name: 'merchantId', description: 'Merchant UUID' })
-  @ApiResponse({
-    status: 200,
-    description: 'Merchant summary data',
-    schema: {
-      type: 'object',
-      properties: {
-        status: { type: 'string', example: 'success' },
-        data: {
-          type: 'object',
-          properties: {
-            staffCount: { type: 'number', example: 5 },
-            walletBalance: { type: 'number', example: 0, description: 'Phase B — Wallet module' },
-            pendingTips: { type: 'number', example: 0, description: 'Phase C — Tipping module' },
-            activeSubscriptions: { type: 'number', example: 0, description: 'Subscription module' },
-          },
-        },
-      },
-    },
-  })
-  @ApiResponse({ status: 403, description: 'Not authorized to view this merchant' })
-  @ApiResponse({ status: 404, description: 'Merchant not found' })
+...
   async getMerchantSummary(
     @Param('merchantId', ParseUUIDPipe) merchantId: string,
     @CurrentUser() user: { sub: string },
@@ -162,5 +137,35 @@ export class MerchantController {
 
     const summary = await this.merchantService.getMerchantSummary(merchantId);
     return { status: 'success', data: summary };
+  }
+
+  @Get(':merchantId/staff')
+  @ApiOperation({
+    summary: 'List staff under a merchant',
+    description:
+      'Returns all staff profiles belonging to a merchant, including ' +
+      'basic user info (name, email, phone). Only the merchant owner can access this.',
+  })
+  @ApiParam({ name: 'merchantId', description: 'Merchant UUID' })
+  @ApiResponse({
+    status: 200,
+    description: 'List of staff members under this merchant',
+  })
+  @ApiResponse({ status: 403, description: 'Not authorized to view staff for this merchant' })
+  @ApiResponse({ status: 404, description: 'Merchant not found' })
+  async getMerchantStaff(
+    @Param('merchantId', ParseUUIDPipe) merchantId: string,
+    @CurrentUser() user: { sub: string },
+  ) {
+    // Get the merchant to check ownership
+    const merchant = await this.merchantService.getMerchantById(merchantId);
+
+    // Check if the current user owns this merchant or is admin
+    if (merchant.ownerId !== user.sub) {
+      throw new ForbiddenException('Not authorized to view staff for this merchant');
+    }
+
+    const staff = await this.merchantService.getMerchantStaff(merchantId);
+    return { status: 'success', data: staff };
   }
 }
