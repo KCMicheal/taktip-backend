@@ -19,6 +19,7 @@ import { WithdrawDto } from './dto/withdraw.dto';
 import { TransferDto } from './dto/transfer.dto';
 import { Role } from '../auth/enums/role.enum';
 import { Merchant } from '../merchant/entities/merchant.entity';
+import { StaffProfile } from '../staff/entities/staff-profile.entity';
 
 /**
  * Response DTO for wallet creation
@@ -65,24 +66,50 @@ export class WalletService {
   ) {}
 
   /**
-   * Ensure the authenticated user has MERCHANT role
+   * Ensure the authenticated user owns (or is ADMIN of) the wallet.
+   *
+   * Ownership rules by ownerType:
+   *   merchant     → Merchant.ownerId === userSub
+   *   staff        → StaffProfile.userId === userSub
+   *   customer     → wallet.ownerId === userSub (direct)
+   *   independent  → wallet.ownerId === userSub (direct)
+   *   ADMIN role   → always allowed (bypass)
    */
-  private assertMerchantRole(userRole: Role): void {
-    if (userRole !== Role.MERCHANT) {
-      throw new ForbiddenException('Access denied: Merchant role required');
+  private async assertOwnsWallet(userSub: string, wallet: Wallet, userRole?: Role): Promise<void> {
+    // ADMIN bypass
+    if (userRole === Role.ADMIN) {
+      return;
     }
-  }
 
-  /**
-   * Ensure the authenticated user owns the merchant associated with the wallet
-   */
-  private async assertOwnsWallet(userSub: string, wallet: Wallet): Promise<void> {
-    const merchant = await this.walletRepository.manager.findOne(Merchant, {
-      where: { id: wallet.merchantId },
-    });
-
-    if (!merchant || merchant.ownerId !== userSub) {
-      throw new ForbiddenException('Not authorized to perform this action');
+    switch (wallet.ownerType) {
+      case 'merchant': {
+        const merchant = await this.walletRepository.manager.findOne(Merchant, {
+          where: { id: wallet.ownerId },
+        });
+        if (!merchant || merchant.ownerId !== userSub) {
+          throw new ForbiddenException('Not authorized to perform this action');
+        }
+        return;
+      }
+      case 'staff': {
+        const staffProfile = await this.walletRepository.manager.findOne(StaffProfile, {
+          where: { id: wallet.ownerId },
+        });
+        if (!staffProfile || staffProfile.userId !== userSub) {
+          throw new ForbiddenException('Not authorized to perform this action');
+        }
+        return;
+      }
+      case 'customer':
+      case 'independent': {
+        // Direct ownership — wallet ownerId IS the user's ID
+        if (wallet.ownerId !== userSub) {
+          throw new ForbiddenException('Not authorized to perform this action');
+        }
+        return;
+      }
+      default:
+        throw new ForbiddenException('Not authorized to perform this action');
     }
   }
 
@@ -95,47 +122,64 @@ export class WalletService {
 
   /**
    * POST /wallets
-   * Create a wallet for a merchant
+   * Create a wallet for a polymorphic owner
    */
   async createWallet(
     user: { sub: string; role: Role },
     dto: CreateWalletDto,
   ): Promise<Wallet> {
-    this.assertMerchantRole(user.role);
+    // Only merchants or admins can create wallets via this endpoint.
+    // Staff wallets are auto-created on profile creation (Phase 3).
+    // Customer wallets are created on first deposit (Phase 4).
+    if (user.role !== Role.MERCHANT && user.role !== Role.ADMIN) {
+      throw new ForbiddenException('Access denied: Merchant or Admin role required');
+    }
 
-    // Check wallet doesn't already exist for this merchant
+    // Verify the owner exists and the caller has permission
+    switch (dto.ownerType) {
+      case 'merchant': {
+        const merchant = await this.walletRepository.manager.findOne(Merchant, {
+          where: { id: dto.ownerId },
+        });
+        if (!merchant) {
+          throw new NotFoundException('Merchant not found');
+        }
+        if (merchant.ownerId !== user.sub) {
+          throw new ForbiddenException('Not authorized to create a wallet for this merchant');
+        }
+        break;
+      }
+      default:
+        // For non-merchant types, check direct ownership or ADMIN
+        if (dto.ownerId !== user.sub && user.role !== Role.ADMIN) {
+          throw new ForbiddenException('Not authorized to create this wallet');
+        }
+    }
+
+    // Check wallet doesn't already exist for this owner
     const existing = await this.walletRepository.findOne({
-      where: { merchantId: dto.merchantId },
+      where: { ownerId: dto.ownerId, ownerType: dto.ownerType },
     });
 
     if (existing) {
-      throw new ConflictException('A wallet already exists for this merchant');
-    }
-
-    // Verify the merchant exists and belongs to this user
-    const merchant = await this.walletRepository.manager.findOne(Merchant, {
-      where: { id: dto.merchantId },
-    });
-
-    if (!merchant) {
-      throw new NotFoundException('Merchant not found');
-    }
-
-    if (merchant.ownerId !== user.sub) {
-      throw new ForbiddenException('Not authorized to create a wallet for this merchant');
+      throw new ConflictException(`A wallet already exists for this ${dto.ownerType}`);
     }
 
     const wallet = this.walletRepository.create({
-      merchantId: dto.merchantId,
+      ownerId: dto.ownerId,
+      ownerType: dto.ownerType,
+      balanceAvailable: 0,
+      balancePending: 0,
+      balanceProcessing: 0,
       currency: dto.currency || 'NGN',
-    });
+    } as Partial<Wallet>);
 
     return this.walletRepository.save(wallet);
   }
 
   /**
    * GET /wallets/:walletId
-   * Get wallet by ID — enforces ownership: only the wallet's merchant can read it.
+   * Get wallet by ID — enforces polymorphic ownership.
    */
   async getWalletById(
     walletId: string,
@@ -149,34 +193,75 @@ export class WalletService {
       throw new NotFoundException('Wallet not found');
     }
 
-    // Enforce ownership: the calling user must own the merchant this wallet
-    // belongs to.  This prevents arbitrary wallet enumeration by ID.
-    await this.assertOwnsWallet(user.sub, wallet);
+    // Enforce polymorphic ownership
+    await this.assertOwnsWallet(user.sub, wallet, user.role);
 
     return wallet;
   }
 
   /**
    * GET /wallets/merchant/:merchantId
-   * Get wallet by merchant ID — enforces ownership: only the merchant's
-   * owner can look up their own wallet.
+   * Get wallet by merchant ID — enforces polymorphic ownership.
    */
   async getWalletByMerchantId(
     merchantId: string,
     user: { sub: string; role: Role },
   ): Promise<Wallet> {
     const wallet = await this.walletRepository.findOne({
-      where: { merchantId },
+      where: { ownerId: merchantId, ownerType: 'merchant' },
     });
 
     if (!wallet) {
       throw new NotFoundException('Wallet not found for this merchant');
     }
 
-    // Enforce ownership: only the merchant's owner can view their wallet
-    await this.assertOwnsWallet(user.sub, wallet);
+    // Enforce polymorphic ownership
+    await this.assertOwnsWallet(user.sub, wallet, user.role);
 
     return wallet;
+  }
+
+  /**
+   * GET /wallets/by-owner/:ownerId
+   * Find a wallet by polymorphic owner — enforces ownership.
+   * This is the primary lookup for role-scoped endpoints (Phase 2).
+   */
+  async getWalletByOwnerId(
+    ownerId: string,
+    ownerType: string,
+    user: { sub: string; role: Role },
+  ): Promise<Wallet> {
+    const wallet = await this.walletRepository.findOne({
+      where: { ownerId, ownerType },
+    });
+
+    if (!wallet) {
+      throw new NotFoundException('Wallet not found for this owner');
+    }
+
+    // Enforce polymorphic ownership
+    await this.assertOwnsWallet(user.sub, wallet, user.role);
+
+    return wallet;
+  }
+
+  /**
+   * Promote funds from balance_pending to balance_available.
+   * Called by BullMQ cron job after PSP confirmation + holding period.
+   */
+  async promoteToAvailable(walletId: string, amount: number): Promise<void> {
+    await this.walletRepository.manager.transaction(async (entityManager) => {
+      // Atomic: decrement pending, increment available
+      await entityManager.query(
+        'UPDATE "wallets" ' +
+        'SET "balance_pending" = CAST("balance_pending" AS numeric(15,2)) - $1, ' +
+        '"balance_available" = CAST("balance_available" AS numeric(15,2)) + $1 ' +
+        'WHERE "id" = $2 AND "balance_pending" >= $1',
+        [amount, walletId],
+      );
+    });
+
+    this.logger.log(`Promoted ${amount} from pending to available for wallet ${walletId}`);
   }
 
   /**
@@ -188,8 +273,7 @@ export class WalletService {
     user: { sub: string; role: Role },
     dto: DepositDto,
   ): Promise<TransactionResponseDto> {
-    this.assertMerchantRole(user.role);
-
+    // Ownership is enforced inside getWalletById
     const wallet = await this.getWalletById(dto.walletId, user);
     // Ownership is enforced inside getWalletById
 
@@ -200,7 +284,7 @@ export class WalletService {
         // Atomic increment — PostgreSQL locks the row and computes inline,
         // so concurrent requests always see a consistent balance.
         await entityManager.query(
-          'UPDATE "wallets" SET "balance" = CAST("balance" AS numeric(15,2)) + $1 WHERE "id" = $2',
+          'UPDATE "wallets" SET "balance_available" = CAST("balance_available" AS numeric(15,2)) + $1 WHERE "id" = $2',
           [dto.amount, wallet.id],
         );
 
@@ -217,6 +301,8 @@ export class WalletService {
           reference,
           description: dto.description || null,
           transactionStatus: TransactionStatus.COMPLETED,
+          balanceBefore: wallet.balanceAvailable,
+          balanceAfter: (wallet.balanceAvailable + dto.amount),
         });
 
         await entityManager.save(transaction);
@@ -237,8 +323,7 @@ export class WalletService {
     user: { sub: string; role: Role },
     dto: WithdrawDto,
   ): Promise<TransactionResponseDto> {
-    this.assertMerchantRole(user.role);
-
+    // Ownership is enforced inside getWalletById
     const wallet = await this.getWalletById(dto.walletId, user);
     // Ownership is enforced inside getWalletById
 
@@ -249,7 +334,7 @@ export class WalletService {
         // Atomic decrement with inline guard: UPDATE returns 0 rows
         // when balance < amount, preventing concurrent overspend.
         const result: any[] = await entityManager.query(
-          'UPDATE "wallets" SET "balance" = CAST("balance" AS numeric(15,2)) - $1 WHERE "id" = $2 AND "balance" >= $1',
+          'UPDATE "wallets" SET "balance_available" = CAST("balance_available" AS numeric(15,2)) - $1 WHERE "id" = $2 AND "balance_available" >= $1',
           [dto.amount, wallet.id],
         );
 
@@ -270,6 +355,8 @@ export class WalletService {
           reference,
           description: dto.description || null,
           transactionStatus: TransactionStatus.COMPLETED,
+          balanceBefore: wallet.balanceAvailable,
+          balanceAfter: (wallet.balanceAvailable - dto.amount),
         });
 
         await entityManager.save(transaction);
@@ -283,20 +370,23 @@ export class WalletService {
 
   /**
    * GET /wallets/:walletId/transactions
-   * List wallet transactions with pagination
+   * List wallet transactions with pagination — enforces ownership.
    */
   async getTransactions(
     walletId: string,
     user: { sub: string; role: Role },
     query: { page?: number; limit?: number },
   ): Promise<TransactionsListDto> {
-    // Any authenticated user can view transactions
+    // Enforce ownership: look up wallet, then assert ownership
+    const wallet = await this.getWalletById(walletId, user);
+    // Ownership is enforced inside getWalletById
+
     const page = query.page || 1;
     const limit = query.limit || 20;
     const skip = (page - 1) * limit;
 
     const [transactions, total] = await this.transactionRepository.findAndCount({
-      where: { walletId },
+      where: { walletId: wallet.id },
       order: { createdAt: 'DESC' },
       skip,
       take: limit,
@@ -314,8 +404,8 @@ export class WalletService {
     user: { sub: string; role: Role },
     dto: TransferDto,
   ): Promise<TransferResponseDto> {
-    this.assertMerchantRole(user.role);
-
+    // Source wallet ownership is enforced inside getWalletById.
+    // Destination wallet is unrestricted (any wallet can receive).
     const sourceWallet = await this.getWalletById(dto.sourceWalletId, user);
     // Ownership of source wallet is enforced inside getWalletById.
     // Destination wallet is looked up directly (no ownership check) because
@@ -340,7 +430,7 @@ export class WalletService {
       async (entityManager) => {
         // Source: atomic decrement with inline guard
         const srcResult: any[] = await entityManager.query(
-          'UPDATE "wallets" SET "balance" = CAST("balance" AS numeric(15,2)) - $1 WHERE "id" = $2 AND "balance" >= $1',
+          'UPDATE "wallets" SET "balance_available" = CAST("balance_available" AS numeric(15,2)) - $1 WHERE "id" = $2 AND "balance_available" >= $1',
           [dto.amount, sourceWallet.id],
         );
 
@@ -350,7 +440,7 @@ export class WalletService {
 
         // Destination: atomic increment (no guard needed)
         await entityManager.query(
-          'UPDATE "wallets" SET "balance" = CAST("balance" AS numeric(15,2)) + $1 WHERE "id" = $2',
+          'UPDATE "wallets" SET "balance_available" = CAST("balance_available" AS numeric(15,2)) + $1 WHERE "id" = $2',
           [dto.amount, destWallet.id],
         );
 
@@ -370,6 +460,8 @@ export class WalletService {
           reference: sourceRef,
           description: dto.description || null,
           transactionStatus: TransactionStatus.COMPLETED,
+          balanceBefore: sourceWallet.balanceAvailable,
+          balanceAfter: (sourceWallet.balanceAvailable - dto.amount),
         });
 
         const destTx = entityManager.create(Transaction, {
@@ -380,6 +472,8 @@ export class WalletService {
           reference: destRef,
           description: dto.description || null,
           transactionStatus: TransactionStatus.COMPLETED,
+          balanceBefore: destWallet.balanceAvailable,
+          balanceAfter: (destWallet.balanceAvailable + dto.amount),
         });
 
         await entityManager.save(sourceTx);

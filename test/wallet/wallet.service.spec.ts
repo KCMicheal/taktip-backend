@@ -53,8 +53,11 @@ describe('WalletService', () => {
     const wallet = new Wallet();
     Object.assign(wallet, {
       id: 'wallet-uuid',
-      merchantId: 'merchant-uuid',
-      balance: 5000,
+      ownerId: 'merchant-uuid',
+      ownerType: 'merchant',
+      balanceAvailable: 5000,
+      balancePending: 0,
+      balanceProcessing: 0,
       currency: 'NGN',
       status: 1,
       createdAt: new Date(),
@@ -129,13 +132,18 @@ describe('WalletService', () => {
       mockWalletRepository.create.mockReturnValue(createMockWallet());
       mockWalletRepository.save.mockResolvedValue(createMockWallet());
 
-      const dto = { merchantId: 'merchant-uuid', currency: 'NGN' };
+      const dto = { ownerId: 'merchant-uuid', ownerType: 'merchant', currency: 'NGN' };
       const result = await service.createWallet(mockUser, dto);
 
       expect(result).toBeDefined();
-      expect(result.merchantId).toBe('merchant-uuid');
+      expect(result.ownerId).toBe('merchant-uuid');
+      expect(result.ownerType).toBe('merchant');
       expect(mockWalletRepository.create).toHaveBeenCalledWith({
-        merchantId: 'merchant-uuid',
+        ownerId: 'merchant-uuid',
+        ownerType: 'merchant',
+        balanceAvailable: 0,
+        balancePending: 0,
+        balanceProcessing: 0,
         currency: 'NGN',
       });
       expect(mockWalletRepository.save).toHaveBeenCalled();
@@ -144,7 +152,7 @@ describe('WalletService', () => {
     it('should throw ConflictException if wallet already exists', async () => {
       mockWalletRepository.findOne.mockResolvedValue(createMockWallet());
 
-      const dto = { merchantId: 'merchant-uuid', currency: 'NGN' };
+      const dto = { ownerId: 'merchant-uuid', ownerType: 'merchant', currency: 'NGN' };
       await expect(service.createWallet(mockUser, dto)).rejects.toThrow(
         ConflictException,
       );
@@ -154,7 +162,7 @@ describe('WalletService', () => {
       mockWalletRepository.findOne.mockResolvedValue(null); // no existing wallet
       mockEntityManager.findOne.mockResolvedValue(null); // merchant not found
 
-      const dto = { merchantId: 'nonexistent-merchant', currency: 'NGN' };
+      const dto = { ownerId: 'nonexistent-merchant', ownerType: 'merchant', currency: 'NGN' };
       await expect(service.createWallet(mockUser, dto)).rejects.toThrow(
         NotFoundException,
       );
@@ -163,7 +171,8 @@ describe('WalletService', () => {
     it('should throw ForbiddenException if user is not MERCHANT role', async () => {
       await expect(
         service.createWallet({ sub: 'user-uuid', role: Role.STAFF }, {
-          merchantId: 'merchant-uuid',
+          ownerId: 'merchant-uuid',
+          ownerType: 'merchant',
           currency: 'NGN',
         }),
       ).rejects.toThrow(ForbiddenException);
@@ -174,11 +183,15 @@ describe('WalletService', () => {
       mockWalletRepository.create.mockReturnValue(createMockWallet());
       mockWalletRepository.save.mockResolvedValue(createMockWallet());
 
-      const dto = { merchantId: 'merchant-uuid' };
+      const dto = { ownerId: 'merchant-uuid', ownerType: 'merchant' };
       await service.createWallet(mockUser, dto);
 
       expect(mockWalletRepository.create).toHaveBeenCalledWith({
-        merchantId: 'merchant-uuid',
+        ownerId: 'merchant-uuid',
+        ownerType: 'merchant',
+        balanceAvailable: 0,
+        balancePending: 0,
+        balanceProcessing: 0,
         currency: 'NGN',
       });
     });
@@ -214,9 +227,10 @@ describe('WalletService', () => {
 
       const result = await service.getWalletByMerchantId('merchant-uuid', mockUser);
 
-      expect(result.merchantId).toBe('merchant-uuid');
+      expect(result.ownerId).toBe('merchant-uuid');
+      expect(result.ownerType).toBe('merchant');
       expect(mockWalletRepository.findOne).toHaveBeenCalledWith({
-        where: { merchantId: 'merchant-uuid' },
+        where: { ownerId: 'merchant-uuid', ownerType: 'merchant' },
       });
     });
 
@@ -231,7 +245,7 @@ describe('WalletService', () => {
 
   describe('deposit', () => {
     it('should deposit funds and create transaction', async () => {
-      const mockWallet = createMockWallet({ balance: 1000 });
+      const mockWallet = createMockWallet({ balanceAvailable: 1000 });
       mockWalletRepository.findOne.mockResolvedValue(mockWallet);
 
       (mockEntityManager.transaction).mockImplementation(async (cb: (em: typeof mockEntityManager) => Promise<unknown>) => cb(mockEntityManager));
@@ -241,7 +255,7 @@ describe('WalletService', () => {
       //            2nd = wallet re-fetch inside transaction
       mockEntityManager.findOne
         .mockResolvedValueOnce(mockMerchant)
-        .mockResolvedValueOnce(createMockWallet({ balance: 1500 }));
+        .mockResolvedValueOnce(createMockWallet({ balanceAvailable: 1500 }));
       mockEntityManager.save.mockResolvedValue(undefined);
 
       const dto = {
@@ -253,7 +267,7 @@ describe('WalletService', () => {
 
       const result = await service.deposit(mockUser, dto);
 
-      expect(result.wallet.balance).toBe(1500);
+      expect(result.wallet.balanceAvailable).toBe(1500);
       expect(result.transaction.type).toBe(TransactionType.DEPOSIT);
       expect(result.transaction.transactionStatus).toBe(TransactionStatus.COMPLETED);
       // Verify atomic SQL was used (not in-memory save)
@@ -264,13 +278,13 @@ describe('WalletService', () => {
     });
 
     it('should generate reference when not provided', async () => {
-      const mockWallet = createMockWallet({ balance: 1000 });
+      const mockWallet = createMockWallet({ balanceAvailable: 1000 });
       mockWalletRepository.findOne.mockResolvedValue(mockWallet);
       (mockEntityManager.transaction).mockImplementation(async (cb: (em: typeof mockEntityManager) => Promise<unknown>) => cb(mockEntityManager));
       mockEntityManager.query.mockResolvedValue([]);
       mockEntityManager.findOne
         .mockResolvedValueOnce(mockMerchant)
-        .mockResolvedValueOnce(createMockWallet({ balance: 1500 }));
+        .mockResolvedValueOnce(createMockWallet({ balanceAvailable: 1500 }));
       mockEntityManager.save.mockResolvedValue(undefined);
 
       const dto = { walletId: 'wallet-uuid', amount: 500 };
@@ -280,12 +294,13 @@ describe('WalletService', () => {
       expect(result.transaction.reference).toMatch(/^DEP-/);
     });
 
-    it('should throw ForbiddenException for non-merchant role', async () => {
+    it('should throw ForbiddenException when wallet belongs to another user', async () => {
+      mockWalletRepository.findOne.mockResolvedValue(createMockWallet());
+      mockEntityManager.findOne.mockResolvedValueOnce({ ...mockMerchant, ownerId: 'other-user-uuid' });
+
+      const dto = { walletId: 'wallet-uuid', amount: 500 };
       await expect(
-        service.deposit({ sub: 'user-uuid', role: Role.CUSTOMER }, {
-          walletId: 'wallet-uuid',
-          amount: 500,
-        }),
+        service.deposit({ sub: 'user-uuid', role: Role.CUSTOMER }, dto),
       ).rejects.toThrow(ForbiddenException);
     });
 
@@ -300,7 +315,7 @@ describe('WalletService', () => {
 
   describe('withdraw', () => {
     it('should withdraw funds and create transaction', async () => {
-      const mockWallet = createMockWallet({ balance: 2000 });
+      const mockWallet = createMockWallet({ balanceAvailable: 2000 });
       mockWalletRepository.findOne.mockResolvedValue(mockWallet);
       (mockEntityManager.transaction).mockImplementation(async (cb: (em: typeof mockEntityManager) => Promise<unknown>) => cb(mockEntityManager));
       // Atomic SQL decrement — 1 row affected (guard passes)
@@ -308,7 +323,7 @@ describe('WalletService', () => {
       // Sequence: 1st findOne = assertOwnsWallet (merchant), 2nd = tx re-fetch
       mockEntityManager.findOne
         .mockResolvedValueOnce(mockMerchant)
-        .mockResolvedValueOnce(createMockWallet({ balance: 1500 }));
+        .mockResolvedValueOnce(createMockWallet({ balanceAvailable: 1500 }));
       mockEntityManager.save.mockResolvedValue(undefined);
 
       const dto = {
@@ -320,7 +335,7 @@ describe('WalletService', () => {
 
       const result = await service.withdraw(mockUser, dto);
 
-      expect(result.wallet.balance).toBe(1500);
+      expect(result.wallet.balanceAvailable).toBe(1500);
       expect(result.transaction.type).toBe(TransactionType.WITHDRAW);
       // Verify atomic SQL with guard was used
       expect(mockEntityManager.query).toHaveBeenCalledWith(
@@ -330,7 +345,7 @@ describe('WalletService', () => {
     });
 
     it('should throw BadRequestException for insufficient balance', async () => {
-      const mockWallet = createMockWallet({ balance: 100 });
+      const mockWallet = createMockWallet({ balanceAvailable: 100 });
       mockWalletRepository.findOne.mockResolvedValue(mockWallet);
       (mockEntityManager.transaction).mockImplementation(async (cb: (em: typeof mockEntityManager) => Promise<unknown>) => cb(mockEntityManager));
       mockEntityManager.findOne.mockResolvedValueOnce(mockMerchant);
@@ -345,13 +360,13 @@ describe('WalletService', () => {
     });
 
     it('should generate reference when not provided', async () => {
-      const mockWallet = createMockWallet({ balance: 2000 });
+      const mockWallet = createMockWallet({ balanceAvailable: 2000 });
       mockWalletRepository.findOne.mockResolvedValue(mockWallet);
       (mockEntityManager.transaction).mockImplementation(async (cb: (em: typeof mockEntityManager) => Promise<unknown>) => cb(mockEntityManager));
       mockEntityManager.query.mockResolvedValue([{}]);
       mockEntityManager.findOne
         .mockResolvedValueOnce(mockMerchant)
-        .mockResolvedValueOnce(createMockWallet({ balance: 1500 }));
+        .mockResolvedValueOnce(createMockWallet({ balanceAvailable: 1500 }));
       mockEntityManager.save.mockResolvedValue(undefined);
 
       const dto = { walletId: 'wallet-uuid', amount: 500 };
@@ -361,12 +376,13 @@ describe('WalletService', () => {
       expect(result.transaction.reference).toMatch(/^WTH-/);
     });
 
-    it('should throw ForbiddenException for non-merchant role', async () => {
+    it('should throw ForbiddenException when wallet belongs to another user', async () => {
+      mockWalletRepository.findOne.mockResolvedValue(createMockWallet());
+      mockEntityManager.findOne.mockResolvedValueOnce({ ...mockMerchant, ownerId: 'other-user-uuid' });
+
+      const dto = { walletId: 'wallet-uuid', amount: 500 };
       await expect(
-        service.withdraw({ sub: 'user-uuid', role: Role.STAFF }, {
-          walletId: 'wallet-uuid',
-          amount: 500,
-        }),
+        service.withdraw({ sub: 'user-uuid', role: Role.CUSTOMER }, dto),
       ).rejects.toThrow(ForbiddenException);
     });
   });
@@ -413,12 +429,12 @@ describe('WalletService', () => {
     it('should transfer funds between wallets', async () => {
       const sourceWallet = createMockWallet({
         id: 'source-uuid',
-        balance: 3000,
+        balanceAvailable: 3000,
       });
       const destWallet = createMockWallet({
         id: 'dest-uuid',
-        merchantId: 'merchant-2',
-        balance: 1000,
+        ownerId: 'merchant-2',
+        balanceAvailable: 1000,
       });
 
       mockWalletRepository.findOne
@@ -438,8 +454,8 @@ describe('WalletService', () => {
       //            2nd = source wallet re-fetch, 3rd = dest wallet re-fetch
       mockEntityManager.findOne
         .mockResolvedValueOnce(mockMerchant)
-        .mockResolvedValueOnce(createMockWallet({ id: 'source-uuid', balance: 2000 }))
-        .mockResolvedValueOnce(createMockWallet({ id: 'dest-uuid', merchantId: 'merchant-2', balance: 2000 }));
+        .mockResolvedValueOnce(createMockWallet({ id: 'source-uuid', balanceAvailable: 2000 }))
+        .mockResolvedValueOnce(createMockWallet({ id: 'dest-uuid', ownerId: 'merchant-2', balanceAvailable: 2000 }));
 
       const dto = {
         sourceWalletId: 'source-uuid',
@@ -450,8 +466,8 @@ describe('WalletService', () => {
 
       const result = await service.transfer(mockUser, dto);
 
-      expect(result.sourceWallet.balance).toBe(2000);
-      expect(result.destWallet.balance).toBe(2000);
+      expect(result.sourceWallet.balanceAvailable).toBe(2000);
+      expect(result.destWallet.balanceAvailable).toBe(2000);
       expect(result.sourceTx.type).toBe(TransactionType.TRANSFER_OUT);
       expect(result.destTx.type).toBe(TransactionType.TRANSFER_IN);
       // Verify atomic SQL with guard on source
@@ -476,12 +492,12 @@ describe('WalletService', () => {
     it('should throw BadRequestException for insufficient source balance', async () => {
       const sourceWallet = createMockWallet({
         id: 'source-uuid',
-        balance: 100,
+        balanceAvailable: 100,
       });
       const destWallet = createMockWallet({
         id: 'dest-uuid',
-        merchantId: 'merchant-2',
-        balance: 1000,
+        ownerId: 'merchant-2',
+        balanceAvailable: 1000,
       });
 
       mockWalletRepository.findOne
@@ -504,15 +520,24 @@ describe('WalletService', () => {
       );
     });
 
-    it('should throw ForbiddenException for non-merchant role', async () => {
+    it('should throw ForbiddenException when source wallet belongs to another user', async () => {
+      const sourceWallet = createMockWallet({
+        id: 'source-uuid',
+        ownerId: 'merchant-uuid',
+        ownerType: 'merchant',
+        balanceAvailable: 3000,
+      });
+      mockWalletRepository.findOne.mockResolvedValue(sourceWallet);
+      mockEntityManager.findOne.mockResolvedValueOnce({ ...mockMerchant, ownerId: 'other-user-uuid' });
+
       const dto = {
         sourceWalletId: 'source-uuid',
         destinationWalletId: 'dest-uuid',
-        amount: 1000,
+        amount: 500,
       };
 
       await expect(
-        service.transfer({ sub: 'user-uuid', role: Role.ADMIN }, dto),
+        service.transfer({ sub: 'user-uuid', role: Role.CUSTOMER }, dto),
       ).rejects.toThrow(ForbiddenException);
     });
   });

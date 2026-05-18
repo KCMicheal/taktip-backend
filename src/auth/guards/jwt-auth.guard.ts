@@ -7,12 +7,17 @@ import {
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { PUBLIC_KEY } from '../decorators/public.decorator';
+import { Role } from '../enums/role.enum';
 
 interface AuthenticatedRequest {
   headers: {
     authorization?: string;
   };
-  user?: Record<string, unknown>;
+  user?: {
+    sub: string;
+    role: Role;
+    [key: string]: unknown;
+  };
 }
 
 /**
@@ -51,7 +56,7 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     try {
-      const payload = await this.jwtService.verifyAsync<Record<string, unknown>>(token);
+      const payload = await this.jwtService.verifyAsync<{ sub: string; role: Role }>(token);
       request.user = payload;
     } catch {
       throw new UnauthorizedException('Invalid or expired token');

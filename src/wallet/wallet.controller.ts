@@ -40,9 +40,9 @@ export class WalletController {
   constructor(private readonly walletService: WalletService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a wallet for a merchant' })
+  @ApiOperation({ summary: 'Create a wallet for a polymorphic owner' })
   @ApiResponse({ status: 201, description: 'Wallet created successfully' })
-  @ApiResponse({ status: 409, description: 'Wallet already exists for this merchant' })
+  @ApiResponse({ status: 409, description: 'Wallet already exists for this owner' })
   async createWallet(
     @CurrentUser() user: { sub: string; role: Role },
     @Body() dto: CreateWalletDto,
