@@ -7,6 +7,8 @@ import { AppModule } from './app.module';
 import { AuthModule } from './auth/auth.module';
 import { HealthModule } from './health/health.module';
 import { StaffModule } from './staff/staff.module';
+import { MerchantModule } from './merchant/merchant.module';
+import { WalletModule } from './wallet/wallet.module';
 import { EnumTransformPipe } from './common/pipes/enum-transform.pipe';
 
 // Response schemas - defined inline to ensure they're included
@@ -178,7 +180,7 @@ async function bootstrap() {
     .build();
 
   const baseDocument = SwaggerModule.createDocument(app, baseConfig, {
-    include: [AuthModule, HealthModule, StaffModule],
+    include: [AuthModule, HealthModule, StaffModule, MerchantModule, WalletModule],
     deepScanRoutes: true,
   });
 

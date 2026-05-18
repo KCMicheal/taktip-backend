@@ -31,8 +31,11 @@ describe('WalletController', () => {
 
   const mockWallet = {
     id: 'wallet-uuid',
-    merchantId: 'merchant-uuid',
-    balance: 5000,
+    ownerId: 'merchant-uuid',
+    ownerType: 'merchant',
+    balanceAvailable: 5000,
+    balancePending: 0,
+    balanceProcessing: 0,
     currency: 'NGN',
     status: 1,
     createdAt: new Date(),
@@ -79,7 +82,7 @@ describe('WalletController', () => {
     it('should create a wallet and return success', async () => {
       mockWalletService.createWallet.mockResolvedValue(mockWallet);
 
-      const dto = { merchantId: 'merchant-uuid', currency: 'NGN' };
+      const dto = { ownerId: 'merchant-uuid', ownerType: 'merchant', currency: 'NGN' };
       const result = await controller.createWallet(mockUser, dto);
 
       expect(result.status).toBe('success');

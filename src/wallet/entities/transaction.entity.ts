@@ -25,6 +25,12 @@ export class Transaction extends BaseEntity {
   @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
   fee: number;
 
+  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true, name: 'balance_before' })
+  balanceBefore: number | null;
+
+  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true, name: 'balance_after' })
+  balanceAfter: number | null;
+
   @Column({ type: 'varchar', unique: true })
   reference: string;
 

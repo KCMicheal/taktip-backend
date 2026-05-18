@@ -21,6 +21,8 @@ import { DepositDto } from './dto/deposit.dto';
 import { WithdrawDto } from './dto/withdraw.dto';
 import { TransferDto } from './dto/transfer.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Role } from '../auth/enums/role.enum';
 
@@ -32,17 +34,18 @@ class SuccessResponseDto<T> {
   data: T;
 }
 
-@ApiTags('wallets')
+@ApiTags('Admin Wallet')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.ADMIN)
 @Controller('wallets')
 export class WalletController {
   constructor(private readonly walletService: WalletService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a wallet for a merchant' })
+  @ApiOperation({ summary: 'Create a wallet for a polymorphic owner' })
   @ApiResponse({ status: 201, description: 'Wallet created successfully' })
-  @ApiResponse({ status: 409, description: 'Wallet already exists for this merchant' })
+  @ApiResponse({ status: 409, description: 'Wallet already exists for this owner' })
   async createWallet(
     @CurrentUser() user: { sub: string; role: Role },
     @Body() dto: CreateWalletDto,
@@ -79,7 +82,7 @@ export class WalletController {
   @ApiOperation({ summary: 'Deposit to wallet' })
   @ApiResponse({ status: 201, description: 'Deposit completed' })
   @ApiResponse({ status: 400, description: 'Invalid deposit amount' })
-  @ApiResponse({ status: 403, description: 'Access denied: Merchant role required' })
+  @ApiResponse({ status: 403, description: 'Access denied: Admin role required' })
   async deposit(
     @CurrentUser() user: { sub: string; role: Role },
     @Body() dto: DepositDto,
@@ -92,7 +95,7 @@ export class WalletController {
   @ApiOperation({ summary: 'Withdraw from wallet' })
   @ApiResponse({ status: 201, description: 'Withdrawal completed' })
   @ApiResponse({ status: 400, description: 'Insufficient balance or invalid amount' })
-  @ApiResponse({ status: 403, description: 'Access denied: Merchant role required' })
+  @ApiResponse({ status: 403, description: 'Access denied: Admin role required' })
   async withdraw(
     @CurrentUser() user: { sub: string; role: Role },
     @Body() dto: WithdrawDto,
@@ -125,7 +128,7 @@ export class WalletController {
   @ApiOperation({ summary: 'Transfer between wallets' })
   @ApiResponse({ status: 201, description: 'Transfer completed' })
   @ApiResponse({ status: 400, description: 'Invalid transfer parameters or insufficient balance' })
-  @ApiResponse({ status: 403, description: 'Access denied: Merchant role required' })
+  @ApiResponse({ status: 403, description: 'Access denied: Admin role required' })
   async transfer(
     @CurrentUser() user: { sub: string; role: Role },
     @Body() dto: TransferDto,

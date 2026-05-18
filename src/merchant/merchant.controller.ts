@@ -163,4 +163,34 @@ export class MerchantController {
     const summary = await this.merchantService.getMerchantSummary(merchantId);
     return { status: 'success', data: summary };
   }
+
+  @Get(':merchantId/staff')
+  @ApiOperation({
+    summary: 'List staff under a merchant',
+    description:
+      'Returns all staff profiles belonging to a merchant, including ' +
+      'basic user info (name, email, phone). Only the merchant owner can access this.',
+  })
+  @ApiParam({ name: 'merchantId', description: 'Merchant UUID' })
+  @ApiResponse({
+    status: 200,
+    description: 'List of staff members under this merchant',
+  })
+  @ApiResponse({ status: 403, description: 'Not authorized to view staff for this merchant' })
+  @ApiResponse({ status: 404, description: 'Merchant not found' })
+  async getMerchantStaff(
+    @Param('merchantId', ParseUUIDPipe) merchantId: string,
+    @CurrentUser() user: { sub: string },
+  ) {
+    // Get the merchant to check ownership
+    const merchant = await this.merchantService.getMerchantById(merchantId);
+
+    // Check if the current user owns this merchant or is admin
+    if (merchant.ownerId !== user.sub) {
+      throw new ForbiddenException('Not authorized to view staff for this merchant');
+    }
+
+    const staff = await this.merchantService.getMerchantStaff(merchantId);
+    return { status: 'success', data: staff };
+  }
 }

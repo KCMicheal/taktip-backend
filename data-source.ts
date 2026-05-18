@@ -16,6 +16,7 @@ const entities = [
   path.join(__dirname, 'src/merchant/entities/*.entity{.ts,.js}'),
   path.join(__dirname, 'src/staff/entities/*.entity{.ts,.js}'),
   path.join(__dirname, 'src/wallet/entities/*.entity{.ts,.js}'),
+  path.join(__dirname, 'src/customer/entities/*.entity{.ts,.js}'),
 ];
 
 export const AppDataSource = new DataSource({

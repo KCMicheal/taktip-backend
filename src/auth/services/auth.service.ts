@@ -32,7 +32,7 @@ export interface UserResponse {
   phone: string | null;
   firstName: string | null;
   lastName: string | null;
-  role: string;
+  role: Role;
   isVerified: boolean;
 }
 
@@ -207,7 +207,7 @@ export class AuthService {
       phone: user.phone,
       firstName: user.firstName,
       lastName: user.lastName,
-      role: enumToString(Role, user.role) ?? 'UNKNOWN',
+      role: user.role,
       isVerified: user.isEmailVerified,
     };
   }

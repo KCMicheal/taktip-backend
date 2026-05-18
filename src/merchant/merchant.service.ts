@@ -2,6 +2,7 @@ import { Injectable, ConflictException, Logger, NotFoundException } from '@nestj
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Merchant } from './entities/merchant.entity';
+import { StaffProfile } from '../staff/entities/staff-profile.entity';
 import { BusinessType } from '../common/enums/business-type.enum';
 
 @Injectable()
@@ -11,6 +12,8 @@ export class MerchantService {
   constructor(
     @InjectRepository(Merchant)
     private readonly merchantRepository: Repository<Merchant>,
+    @InjectRepository(StaffProfile)
+    private readonly staffProfileRepository: Repository<StaffProfile>,
   ) {}
 
   /**
@@ -229,5 +232,44 @@ export class MerchantService {
       pendingTips: 0,   // TODO: Phase C — Tipping module
       activeSubscriptions: 0, // TODO: Subscription module
     };
+  }
+
+  /**
+   * GET /merchant/:merchantId/staff
+   * List all staff profiles belonging to this merchant, including basic user info.
+   * Only the merchant owner can access this.
+   */
+  async getMerchantStaff(merchantId: string): Promise<
+    Array<{
+      id: string;
+      userId: string;
+      firstName: string | null;
+      lastName: string | null;
+      email: string;
+      phone: string | null;
+      displayName: string | null;
+      roleTag: string | null;
+      isClockedIn: boolean;
+      createdAt: Date;
+    }>
+  > {
+    const profiles = await this.staffProfileRepository.find({
+      where: { merchantId },
+      relations: ['user'],
+      order: { createdAt: 'DESC' },
+    });
+
+    return profiles.map((profile) => ({
+      id: profile.id,
+      userId: profile.userId,
+      firstName: profile.user?.firstName ?? null,
+      lastName: profile.user?.lastName ?? null,
+      email: profile.user?.email ?? '',
+      phone: profile.user?.phone ?? null,
+      displayName: profile.displayName,
+      roleTag: profile.roleTag,
+      isClockedIn: profile.isClockedIn,
+      createdAt: profile.createdAt,
+    }));
   }
 }

@@ -5,4 +5,5 @@ export enum Role {
   MERCHANT = 2, // Business owners
   STAFF = 3, // Employees
   ADMIN = 4, // Platform administrators
+  INDEPENDENT_PROVIDER = 5, // Freelancer / independent contractor
 }
