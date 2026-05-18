@@ -8,8 +8,8 @@ export class CreateCustomerProfilesTable1720000000003 implements MigrationInterf
       CREATE TABLE "customer_profiles" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "status" integer NOT NULL DEFAULT 1,
-        "created_at" timestamp NOT NULL DEFAULT now(),
-        "updated_at" timestamp NOT NULL DEFAULT now(),
+        "createdAt" timestamp NOT NULL DEFAULT now(),
+        "updatedAt" timestamp NOT NULL DEFAULT now(),
         "userId" uuid NOT NULL,
         CONSTRAINT "PK_customer_profiles" PRIMARY KEY ("id"),
         CONSTRAINT "UQ_customer_profiles_userId" UNIQUE ("userId")

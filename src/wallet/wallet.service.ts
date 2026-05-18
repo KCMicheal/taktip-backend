@@ -82,7 +82,7 @@ export interface StaffConsolidatedWalletsDto {
  * Well-known ownerId for the platform fee collection wallet.
  * This wallet receives 5% of every internal (tip-from-balance) transaction.
  */
-export const PLATFORM_WALLET_OWNER_ID = 'platform-fee-wallet';
+export const PLATFORM_WALLET_OWNER_ID = '00000000-0000-0000-0000-000000000001';
 
 /**
  * Well-known ownerType for the platform fee collection wallet.
@@ -377,6 +377,21 @@ export class WalletService {
     const platformWallet = await this.getOrCreatePlatformWallet();
 
     return this.walletRepository.manager.transaction(async (entityManager) => {
+      // 0. Capture pre-update balances for correct ledger snapshots
+      const customerBefore = await entityManager.findOne(Wallet, {
+        where: { id: customerWalletId },
+      });
+      const staffBefore = await entityManager.findOne(Wallet, {
+        where: { id: staffWalletId },
+      });
+      const platformBefore = await entityManager.findOne(Wallet, {
+        where: { id: platformWallet.id },
+      });
+
+      const customerBal = customerBefore?.balanceAvailable ?? 0;
+      const staffBal = staffBefore?.balanceAvailable ?? 0;
+      const platformBal = platformBefore?.balanceAvailable ?? 0;
+
       // 1. Debit customer wallet (atomic guard)
       const customerResult: any[] = await entityManager.query(
         'UPDATE "wallets" SET "balance_available" = CAST("balance_available" AS numeric(15,2)) - $1 WHERE "id" = $2 AND "balance_available" >= $1',
@@ -399,18 +414,7 @@ export class WalletService {
         [feeAmount, platformWallet.id],
       );
 
-      // Re-fetch wallets for balance tracking
-      const updatedCustomer = await entityManager.findOne(Wallet, {
-        where: { id: customerWalletId },
-      });
-      const updatedStaff = await entityManager.findOne(Wallet, {
-        where: { id: staffWalletId },
-      });
-      const updatedPlatform = await entityManager.findOne(Wallet, {
-        where: { id: platformWallet.id },
-      });
-
-      // 4. Record three transactions
+      // 4. Record three transactions with correct pre/post balance snapshots
       const tipOutTx = entityManager.create(Transaction, {
         walletId: customerWalletId,
         type: TransactionType.TIP_OUT,
@@ -420,8 +424,8 @@ export class WalletService {
         reference: refTipOut,
         description: 'Tip to staff',
         transactionStatus: TransactionStatus.COMPLETED,
-        balanceBefore: updatedCustomer?.balanceAvailable ?? 0,
-        balanceAfter: (updatedCustomer?.balanceAvailable ?? 0) + amount,
+        balanceBefore: customerBal,
+        balanceAfter: customerBal - amount,
       });
 
       const tipInTx = entityManager.create(Transaction, {
@@ -432,8 +436,8 @@ export class WalletService {
         reference: refTipIn,
         description: 'Tip received from customer',
         transactionStatus: TransactionStatus.COMPLETED,
-        balanceBefore: updatedStaff?.balanceAvailable ?? 0,
-        balanceAfter: (updatedStaff?.balanceAvailable ?? 0) - netAmount,
+        balanceBefore: staffBal,
+        balanceAfter: staffBal + netAmount,
       });
 
       const feeTx = entityManager.create(Transaction, {
@@ -444,8 +448,8 @@ export class WalletService {
         reference: refFee,
         description: 'Platform fee on tip',
         transactionStatus: TransactionStatus.COMPLETED,
-        balanceBefore: updatedPlatform?.balanceAvailable ?? 0,
-        balanceAfter: (updatedPlatform?.balanceAvailable ?? 0) - feeAmount,
+        balanceBefore: platformBal,
+        balanceAfter: platformBal + feeAmount,
       });
 
       await entityManager.save(tipOutTx);
@@ -527,6 +531,24 @@ export class WalletService {
     await this.assertOwnsWallet(user.sub, wallet, user.role);
 
     return wallet;
+  }
+
+  /**
+   * GET /merchant/wallet
+   * Convenience method: look up the merchant by the authenticated user's ID,
+   * then fetch the merchant's wallet.  Handles the indirection where
+   * wallet.ownerId = merchant.id (not user.sub).
+   */
+  async getMerchantWalletByUserId(
+    user: { sub: string; role: Role },
+  ): Promise<Wallet> {
+    const merchant = await this.walletRepository.manager.findOne(Merchant, {
+      where: { ownerId: user.sub },
+    });
+    if (!merchant) {
+      throw new NotFoundException('Merchant not found for this user');
+    }
+    return this.getWalletByOwnerId(merchant.id, 'merchant', user);
   }
 
   /**
