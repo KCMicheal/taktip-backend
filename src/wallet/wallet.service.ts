@@ -54,6 +54,29 @@ export interface TransactionsListDto {
   total: number;
 }
 
+/**
+ * A single wallet entry in the staff consolidated view
+ */
+export interface StaffWalletEntryDto {
+  merchantName: string;
+  merchantShortCode: string;
+  balanceAvailable: number;
+  balancePending: number;
+  balanceProcessing: number;
+}
+
+/**
+ * Response DTO for the staff consolidated wallet view
+ */
+export interface StaffConsolidatedWalletsDto {
+  wallets: StaffWalletEntryDto[];
+  totalBalances: {
+    balanceAvailable: number;
+    balancePending: number;
+    balanceProcessing: number;
+  };
+}
+
 @Injectable()
 export class WalletService {
   private readonly logger = new Logger(WalletService.name);
@@ -63,6 +86,8 @@ export class WalletService {
     private readonly walletRepository: Repository<Wallet>,
     @InjectRepository(Transaction)
     private readonly transactionRepository: Repository<Transaction>,
+    @InjectRepository(StaffProfile)
+    private readonly staffProfileRepository: Repository<StaffProfile>,
   ) {}
 
   /**
@@ -178,6 +203,36 @@ export class WalletService {
   }
 
   /**
+   * Internal method: create a wallet for a staff profile.
+   * Called by InviteService during invite acceptance (no user context).
+   * Idempotent — returns existing wallet if one already exists.
+   */
+  async createStaffWallet(staffProfileId: string, currency?: string): Promise<Wallet> {
+    // Idempotent: check if wallet already exists for this staff profile
+    const existing = await this.walletRepository.findOne({
+      where: { ownerId: staffProfileId, ownerType: 'staff' },
+    });
+
+    if (existing) {
+      this.logger.log(`Wallet already exists for staff profile ${staffProfileId}, reusing`);
+      return existing;
+    }
+
+    const wallet = this.walletRepository.create({
+      ownerId: staffProfileId,
+      ownerType: 'staff',
+      balanceAvailable: 0,
+      balancePending: 0,
+      balanceProcessing: 0,
+      currency: currency || 'NGN',
+    } as Partial<Wallet>);
+
+    const saved = await this.walletRepository.save(wallet);
+    this.logger.log(`Staff wallet created for profile ${staffProfileId} (id: ${saved.id})`);
+    return saved;
+  }
+
+  /**
    * GET /wallets/:walletId
    * Get wallet by ID — enforces polymorphic ownership.
    */
@@ -243,6 +298,48 @@ export class WalletService {
     await this.assertOwnsWallet(user.sub, wallet, user.role);
 
     return wallet;
+  }
+
+  /**
+   * GET /staff/wallet
+   * Fetch all wallets belonging to a staff user across all merchants they
+   * work for.  Returns consolidated balances with merchant names.
+   */
+  async getStaffConsolidatedWallets(
+    user: { sub: string; role: Role },
+  ): Promise<StaffConsolidatedWalletsDto> {
+    // Find all StaffProfiles linked to this user
+    const staffProfiles = await this.staffProfileRepository.find({
+      where: { userId: user.sub },
+      relations: ['merchant'],
+    });
+
+    // Look up wallets for each StaffProfile
+    const walletPromises = staffProfiles.map(async (profile) => {
+      const wallet = await this.walletRepository.findOne({
+        where: { ownerId: profile.id, ownerType: 'staff' },
+      });
+      return {
+        merchantName: profile.merchant?.name || 'Unknown',
+        merchantShortCode: profile.merchant?.shortCode || '',
+        balanceAvailable: wallet ? Number(wallet.balanceAvailable) : 0,
+        balancePending: wallet ? Number(wallet.balancePending) : 0,
+        balanceProcessing: wallet ? Number(wallet.balanceProcessing) : 0,
+      };
+    });
+
+    const wallets = await Promise.all(walletPromises);
+
+    const totalBalances = wallets.reduce(
+      (acc, w) => ({
+        balanceAvailable: acc.balanceAvailable + w.balanceAvailable,
+        balancePending: acc.balancePending + w.balancePending,
+        balanceProcessing: acc.balanceProcessing + w.balanceProcessing,
+      }),
+      { balanceAvailable: 0, balancePending: 0, balanceProcessing: 0 },
+    );
+
+    return { wallets, totalBalances };
   }
 
   /**

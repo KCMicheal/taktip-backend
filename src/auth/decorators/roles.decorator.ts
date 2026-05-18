@@ -3,8 +3,6 @@ import { Role } from '../enums/role.enum';
 
 export const ROLES_KEY = 'roles';
 
-export const Roles = (...roles: Role[]): PropertyDecorator => {
-  return SetMetadata(ROLES_KEY, roles) as PropertyDecorator;
-};
+export const Roles = (...roles: Role[]) => SetMetadata(ROLES_KEY, roles);
 
-export const rolesDecorator = (...roles: Role[]): PropertyDecorator => Roles(...roles);
+export const rolesDecorator = (...roles: Role[]) => SetMetadata(ROLES_KEY, roles);

@@ -17,6 +17,7 @@ import { User } from '../../auth/entities/user.entity';
 import { Role } from '../../auth/enums/role.enum';
 import { StaffProfile } from '../../staff/entities/staff-profile.entity';
 import { MailService } from '../../auth/services/mail.service';
+import { WalletService } from '../../wallet/wallet.service';
 import { InviteStaffDto, AcceptInviteDto } from '../dto/invite.dto';
 
 @Injectable()
@@ -35,6 +36,7 @@ export class InviteService {
     private readonly staffProfileRepository: Repository<StaffProfile>,
     private readonly mailService: MailService,
     private readonly configService: ConfigService,
+    private readonly walletService: WalletService,
   ) {}
 
   /**
@@ -254,7 +256,11 @@ export class InviteService {
         roleTag: invite.role || 'STAFF',
         isClockedIn: false,
       });
-      await this.staffProfileRepository.save(staffProfile);
+      const savedProfile = await this.staffProfileRepository.save(staffProfile);
+
+      // Auto-create a wallet for the new staff profile (Phase 3)
+      // Idempotent — createStaffWallet skips if wallet already exists
+      await this.walletService.createStaffWallet(savedProfile.id, 'NGN');
       this.logger.log(`Staff profile created for user ${user.id} at merchant ${merchant.id}`);
     } else {
       this.logger.log(`Staff profile already exists for user ${user.id} at merchant ${merchant.id}, skipping creation`);

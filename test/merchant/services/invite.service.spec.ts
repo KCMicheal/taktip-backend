@@ -8,6 +8,7 @@ import { StaffInvite } from '../../../src/merchant/entities/staff-invite.entity'
 import { Merchant } from '../../../src/merchant/entities/merchant.entity';
 import { User } from '../../../src/auth/entities/user.entity';
 import { StaffProfile } from '../../../src/staff/entities/staff-profile.entity';
+import { WalletService } from '../../../src/wallet/wallet.service';
 import { Role } from '../../../src/auth/enums/role.enum';
 import { InviteStatus } from '../../../src/common/enums/invite-status.enum';
 import { InviteStaffDto, AcceptInviteDto } from '../../../src/merchant/dto/invite.dto';
@@ -50,6 +51,10 @@ describe('InviteService', () => {
     get: jest.fn().mockReturnValue('https://app.taktip.com'),
   };
 
+  const mockWalletService = {
+    createStaffWallet: jest.fn().mockResolvedValue({ id: 'wallet-uuid' }),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -77,6 +82,10 @@ describe('InviteService', () => {
         {
           provide: ConfigService,
           useValue: mockConfigService,
+        },
+        {
+          provide: WalletService,
+          useValue: mockWalletService,
         },
       ],
     }).compile();
@@ -229,7 +238,7 @@ describe('InviteService', () => {
         userId: 'new-user-uuid',
         merchantId: 'merchant-uuid',
       });
-      mockStaffProfileRepository.save.mockResolvedValue({});
+      mockStaffProfileRepository.save.mockResolvedValue({ id: 'staff-profile-uuid' });
 
       const dto: AcceptInviteDto = {
         token,
@@ -245,6 +254,10 @@ describe('InviteService', () => {
       });
       expect(mockStaffProfileRepository.create).toHaveBeenCalled();
       expect(mockStaffProfileRepository.save).toHaveBeenCalled();
+      expect(mockWalletService.createStaffWallet).toHaveBeenCalledWith(
+        'staff-profile-uuid',
+        'NGN',
+      );
       expect(mockUserRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({
           email: 'staff@example.com',
@@ -281,7 +294,7 @@ describe('InviteService', () => {
         userId: 'existing-user-uuid',
         merchantId: 'merchant-b-uuid',
       });
-      mockStaffProfileRepository.save.mockResolvedValue({});
+      mockStaffProfileRepository.save.mockResolvedValue({ id: 'staff-profile-b-uuid' });
 
       const dto: AcceptInviteDto = {
         token,
@@ -301,6 +314,10 @@ describe('InviteService', () => {
         }),
       );
       expect(mockStaffProfileRepository.save).toHaveBeenCalled();
+      expect(mockWalletService.createStaffWallet).toHaveBeenCalledWith(
+        'staff-profile-b-uuid',
+        'NGN',
+      );
     });
 
     it('should link existing user to merchant', async () => {
@@ -329,7 +346,7 @@ describe('InviteService', () => {
         userId: 'existing-user-uuid',
         merchantId: 'merchant-uuid',
       });
-      mockStaffProfileRepository.save.mockResolvedValue({});
+      mockStaffProfileRepository.save.mockResolvedValue({ id: 'staff-profile-uuid' });
 
       const dto: AcceptInviteDto = {
         token,
@@ -344,7 +361,62 @@ describe('InviteService', () => {
       });
       expect(mockStaffProfileRepository.create).toHaveBeenCalled();
       expect(mockStaffProfileRepository.save).toHaveBeenCalled();
+      expect(mockWalletService.createStaffWallet).toHaveBeenCalledWith(
+        'staff-profile-uuid',
+        'NGN',
+      );
       expect(mockUserRepository.create).not.toHaveBeenCalled();
+    });
+
+    it('should NOT create staff profile or wallet when profile already exists', async () => {
+      const token = 'reinvite-token';
+      const existingUser = {
+        id: 'existing-user-uuid',
+        email: 'staff@example.com',
+      };
+
+      // Existing staff profile — this would happen if the user already
+      // accepted another invite for the same merchant, or was previously
+      // linked via another flow
+      const existingProfile = {
+        id: 'existing-profile-uuid',
+        userId: 'existing-user-uuid',
+        merchantId: 'merchant-uuid',
+      };
+
+      const mockInvite = {
+        token,
+        email: 'staff@example.com',
+        status: InviteStatus.PENDING,
+        merchantId: 'merchant-uuid',
+        merchant: { id: 'merchant-uuid' },
+      };
+
+      mockInviteRepository.findOne.mockResolvedValue(mockInvite);
+      mockUserRepository.findOne.mockResolvedValue(existingUser);
+      mockInviteRepository.save.mockResolvedValue({ ...mockInvite, status: InviteStatus.ACCEPTED });
+      mockMerchantRepository.findOne.mockResolvedValue({ id: 'merchant-uuid' });
+
+      // StaffProfile ALREADY EXISTS — return the existing one
+      mockStaffProfileRepository.findOne.mockResolvedValue(existingProfile);
+
+      const dto: AcceptInviteDto = {
+        token,
+        password: 'SecurePass123!',
+      };
+
+      const result = await service.acceptInvite(dto);
+
+      expect(result.user).toEqual(existingUser);
+      expect(mockStaffProfileRepository.findOne).toHaveBeenCalledWith({
+        where: { userId: 'existing-user-uuid', merchantId: 'merchant-uuid' },
+      });
+      // Should NOT create a new profile
+      expect(mockStaffProfileRepository.create).not.toHaveBeenCalled();
+      // Should NOT save a new profile
+      expect(mockStaffProfileRepository.save).not.toHaveBeenCalled();
+      // Should NOT auto-create a wallet (no new profile created)
+      expect(mockWalletService.createStaffWallet).not.toHaveBeenCalled();
     });
   });
 

@@ -13,6 +13,7 @@ import { Transaction } from '../../src/wallet/entities/transaction.entity';
 import { TransactionType } from '../../src/wallet/enums/transaction-type.enum';
 import { TransactionStatus } from '../../src/wallet/enums/transaction-status.enum';
 import { Role } from '../../src/auth/enums/role.enum';
+import { StaffProfile } from '../../src/staff/entities/staff-profile.entity';
 
 describe('WalletService', () => {
   let service: WalletService;
@@ -39,6 +40,13 @@ describe('WalletService', () => {
     findOne: jest.fn(),
     find: jest.fn(),
     findAndCount: jest.fn(),
+    create: jest.fn(),
+    save: jest.fn(),
+  };
+
+  const mockStaffProfileRepository = {
+    findOne: jest.fn(),
+    find: jest.fn(),
     create: jest.fn(),
     save: jest.fn(),
   };
@@ -102,6 +110,10 @@ describe('WalletService', () => {
         {
           provide: getRepositoryToken(Transaction),
           useValue: mockTransactionRepository,
+        },
+        {
+          provide: getRepositoryToken(StaffProfile),
+          useValue: mockStaffProfileRepository,
         },
       ],
     }).compile();
