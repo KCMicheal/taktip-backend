@@ -108,7 +108,9 @@ describe('MerchantService', () => {
           merchantId: 'merchant-uuid',
           displayName: 'Alice',
           roleTag: 'Waiter',
+          employeeCode: 'EMP-001',
           isClockedIn: true,
+          status: 1, // EntityStatus.ACTIVE
           createdAt: new Date('2026-01-01'),
           user: {
             id: 'user-1',
@@ -124,7 +126,9 @@ describe('MerchantService', () => {
           merchantId: 'merchant-uuid',
           displayName: 'Bob',
           roleTag: 'Chef',
+          employeeCode: null,
           isClockedIn: false,
+          status: 2, // EntityStatus.INACTIVE
           createdAt: new Date('2026-02-01'),
           user: {
             id: 'user-2',
@@ -155,6 +159,8 @@ describe('MerchantService', () => {
       expect(result[0].phone).toBe('+234700000001');
       expect(result[0].displayName).toBe('Alice');
       expect(result[0].roleTag).toBe('Waiter');
+      expect(result[0].employeeCode).toBe('EMP-001');
+      expect(result[0].isActive).toBe(true);
       expect(result[0].isClockedIn).toBe(true);
 
       // Second staff member
@@ -163,6 +169,8 @@ describe('MerchantService', () => {
       expect(result[1].email).toBe('bob@example.com');
       expect(result[1].phone).toBeNull();
       expect(result[1].roleTag).toBe('Chef');
+      expect(result[1].employeeCode).toBeNull();
+      expect(result[1].isActive).toBe(false);
       expect(result[1].isClockedIn).toBe(false);
     });
 
@@ -184,6 +192,8 @@ describe('MerchantService', () => {
         merchantId: 'merchant-uuid',
         displayName: null,
         roleTag: null,
+        employeeCode: null,
+        status: 1,
         isClockedIn: false,
         createdAt: new Date(),
         user: null,

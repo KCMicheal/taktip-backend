@@ -37,6 +37,15 @@ export class InviteStaffDto {
   @MinLength(2)
   @MaxLength(100)
   name?: string;
+
+  @ApiPropertyOptional({
+    description: 'Custom employee code / staff ID (e.g. EMP-001)',
+    example: 'EMP-001',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  employeeCode?: string;
 }
 
 export class AcceptInviteDto {

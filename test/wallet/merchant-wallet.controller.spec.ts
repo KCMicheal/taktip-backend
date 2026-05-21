@@ -11,7 +11,7 @@ describe('MerchantWalletController', () => {
 
   const mockWalletService = {
     getWalletByOwnerId: jest.fn(),
-    getMerchantWalletByUserId: jest.fn(),
+    getOrCreateMerchantWallet: jest.fn(),
     getTransactions: jest.fn(),
   };
 
@@ -76,13 +76,13 @@ describe('MerchantWalletController', () => {
 
   describe('getMyWallet', () => {
     it('should return the merchant\'s own wallet', async () => {
-      mockWalletService.getMerchantWalletByUserId.mockResolvedValue(mockWallet);
+      mockWalletService.getOrCreateMerchantWallet.mockResolvedValue(mockWallet);
 
       const result = await controller.getMyWallet(mockUser);
 
       expect(result.status).toBe('success');
       expect(result.data).toEqual(mockWallet);
-      expect(mockWalletService.getMerchantWalletByUserId).toHaveBeenCalledWith(mockUser);
+      expect(mockWalletService.getOrCreateMerchantWallet).toHaveBeenCalledWith(mockUser);
     });
   });
 
@@ -92,14 +92,14 @@ describe('MerchantWalletController', () => {
         transactions: [mockTransaction],
         total: 1,
       };
-      mockWalletService.getMerchantWalletByUserId.mockResolvedValue(mockWallet);
+      mockWalletService.getOrCreateMerchantWallet.mockResolvedValue(mockWallet);
       mockWalletService.getTransactions.mockResolvedValue(expectedTransactions);
 
       const result = await controller.getMyTransactions(mockUser, '1', '20');
 
       expect(result.status).toBe('success');
       expect(result.data).toEqual(expectedTransactions);
-      expect(mockWalletService.getMerchantWalletByUserId).toHaveBeenCalledWith(mockUser);
+      expect(mockWalletService.getOrCreateMerchantWallet).toHaveBeenCalledWith(mockUser);
       expect(mockWalletService.getTransactions).toHaveBeenCalledWith(
         'wallet-uuid',
         mockUser,
@@ -108,7 +108,7 @@ describe('MerchantWalletController', () => {
     });
 
     it('should use default pagination when not specified', async () => {
-      mockWalletService.getMerchantWalletByUserId.mockResolvedValue(mockWallet);
+      mockWalletService.getOrCreateMerchantWallet.mockResolvedValue(mockWallet);
       mockWalletService.getTransactions.mockResolvedValue({ transactions: [], total: 0 });
 
       await controller.getMyTransactions(mockUser, undefined, undefined);

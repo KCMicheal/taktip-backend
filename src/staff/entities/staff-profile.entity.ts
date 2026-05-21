@@ -33,6 +33,9 @@ export class StaffProfile extends BaseEntity {
   @Column({ type: 'varchar', nullable: true })
   roleTag: string | null;
 
+  @Column({ type: 'varchar', nullable: true })
+  employeeCode: string | null;
+
   @Column({ type: 'boolean', default: false })
   isClockedIn: boolean;
 

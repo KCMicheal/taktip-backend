@@ -109,6 +109,7 @@ export class InviteService {
       existingInvite.status = InviteStatus.PENDING;
       existingInvite.role = dto.role || 'STAFF';
       existingInvite.name = dto.name || null;
+      existingInvite.employeeCode = dto.employeeCode || null;
       // Clear acceptedAt if it was accepted before
       existingInvite.acceptedAt = null;
       existingInvite.inviteeId = null;
@@ -136,6 +137,7 @@ export class InviteService {
       expiresAt,
       role: dto.role || 'STAFF',
       name: dto.name || null,
+      employeeCode: dto.employeeCode || null,
     });
 
     const savedInvite = await this.inviteRepository.save(invite);
@@ -254,6 +256,7 @@ export class InviteService {
         merchantId: merchant.id,
         displayName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || null,
         roleTag: invite.role || 'STAFF',
+        employeeCode: invite.employeeCode || null,
         isClockedIn: false,
       });
       const savedProfile = await this.staffProfileRepository.save(staffProfile);
