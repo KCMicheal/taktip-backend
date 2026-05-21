@@ -1,8 +1,9 @@
-import { Entity, Column, OneToMany } from 'typeorm';
+import { Entity, Column, OneToMany, Unique } from 'typeorm';
 import { BaseEntity } from '../../common/entities/base.entity';
 import { Transaction } from './transaction.entity';
 
 @Entity('wallets')
+@Unique('UQ_wallets_owner', ['ownerId', 'ownerType'])
 export class Wallet extends BaseEntity {
   /**
    * Polymorphic owner — points to the entity that owns this wallet.
