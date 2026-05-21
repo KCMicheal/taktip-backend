@@ -50,7 +50,7 @@ export class MerchantWalletController {
   ): Promise<SuccessResponseDto<Wallet>> {
     // Merchant wallet ownerId = merchant.id, not user.sub.
     // Use the convenience method that resolves user.sub → merchant.id first.
-    const data = await this.walletService.getMerchantWalletByUserId(user);
+    const data = await this.walletService.getOrCreateMerchantWallet(user);
     return { status: 'success', data };
   }
 
@@ -65,7 +65,7 @@ export class MerchantWalletController {
     @Query('limit') limit?: string,
   ): Promise<SuccessResponseDto<TransactionsListDto>> {
     // First, look up the merchant's wallet by user ID (resolves merchant.id internally)
-    const wallet = await this.walletService.getMerchantWalletByUserId(user);
+    const wallet = await this.walletService.getOrCreateMerchantWallet(user);
     const pageNum = page ? parseInt(page, 10) : 1;
     const limitNum = limit ? parseInt(limit, 10) : 20;
     const data = await this.walletService.getTransactions(wallet.id, user, {

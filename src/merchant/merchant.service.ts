@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Merchant } from './entities/merchant.entity';
 import { StaffProfile } from '../staff/entities/staff-profile.entity';
 import { BusinessType } from '../common/enums/business-type.enum';
+import { EntityStatus } from '../common/enums/entity-status.enum';
 
 @Injectable()
 export class MerchantService {
@@ -249,6 +250,8 @@ export class MerchantService {
       phone: string | null;
       displayName: string | null;
       roleTag: string | null;
+      employeeCode: string | null;
+      isActive: boolean;
       isClockedIn: boolean;
       createdAt: Date;
     }>
@@ -268,6 +271,8 @@ export class MerchantService {
       phone: profile.user?.phone ?? null,
       displayName: profile.displayName,
       roleTag: profile.roleTag,
+      employeeCode: profile.employeeCode ?? null,
+      isActive: profile.status === EntityStatus.ACTIVE,
       isClockedIn: profile.isClockedIn,
       createdAt: profile.createdAt,
     }));

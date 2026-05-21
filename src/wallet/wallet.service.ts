@@ -536,10 +536,12 @@ export class WalletService {
   /**
    * GET /merchant/wallet
    * Convenience method: look up the merchant by the authenticated user's ID,
-   * then fetch the merchant's wallet.  Handles the indirection where
-   * wallet.ownerId = merchant.id (not user.sub).
+   * then fetch (or auto-create) the merchant's wallet.  Handles the indirection
+   * where wallet.ownerId = merchant.id (not user.sub).
+   *
+   * Idempotent — returns existing wallet if one already exists.
    */
-  async getMerchantWalletByUserId(
+  async getOrCreateMerchantWallet(
     user: { sub: string; role: Role },
   ): Promise<Wallet> {
     const merchant = await this.walletRepository.manager.findOne(Merchant, {
@@ -548,7 +550,28 @@ export class WalletService {
     if (!merchant) {
       throw new NotFoundException('Merchant not found for this user');
     }
-    return this.getWalletByOwnerId(merchant.id, 'merchant', user);
+
+    // Check for existing wallet first (idempotent)
+    const existing = await this.walletRepository.findOne({
+      where: { ownerId: merchant.id, ownerType: 'merchant' },
+    });
+    if (existing) {
+      return existing;
+    }
+
+    // Auto-create a wallet for this merchant
+    const wallet = this.walletRepository.create({
+      ownerId: merchant.id,
+      ownerType: 'merchant',
+      balanceAvailable: 0,
+      balancePending: 0,
+      balanceProcessing: 0,
+      currency: merchant.currency || 'NGN',
+    } as Partial<Wallet>);
+
+    const saved = await this.walletRepository.save(wallet);
+    this.logger.log(`Merchant wallet auto-created for merchant ${merchant.id} (id: ${saved.id})`);
+    return saved;
   }
 
   /**
