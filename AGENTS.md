@@ -87,7 +87,71 @@ entities: [
 
 ---
 
-## 4. Ownership Checks for Protected Resources
+## 4. Migration Workflow — Production Deployment
+
+### The Issue
+The app uses `synchronize: true` in dev (auto-syncs schema on restart) and `synchronize: false` in production/staging. **Migrations do NOT auto-run on deploy or restart** — there is no `migrationsRun: true` in the TypeORM config.
+
+### The Problem
+If you deploy code with new entity columns but forget to run the migration, the columns won't exist in production. The app will still function (nullable columns are safe to query), but the new fields won't be populated.
+
+### The Fix — Deployment Procedure
+Always run migrations manually after a code deploy:
+
+```bash
+# After code is deployed and the app has restarted:
+pnpm run migration:run
+```
+
+**For schema-only changes** (adding nullable columns), it's safe to run immediately after deploy. For data migrations, run before the app starts to avoid race conditions.
+
+### Creating a Migration
+When you add/modify a database column in an entity:
+
+1. Write the migration manually (following existing patterns in `src/database/migrations/`), OR
+2. Generate it from the entity diff (requires a running database):
+   ```bash
+   pnpm run migration:generate src/database/migrations/<Timestamp>-<Description>
+   ```
+
+**Manual migration template** (safe to write by hand for simple column additions):
+
+```typescript
+import { MigrationInterface, QueryRunner } from 'typeorm';
+
+export class YourMigrationName<timestamp> implements MigrationInterface {
+  name = 'YourMigrationName<timestamp>';
+
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
+      ALTER TABLE "your_table"
+      ADD COLUMN "your_column" character varying
+    `);
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
+      ALTER TABLE "your_table"
+      DROP COLUMN "your_column"
+    `);
+  }
+}
+```
+
+### Migration Commands Cheat Sheet
+```bash
+pnpm run migration:run        # Apply all pending migrations
+pnpm run migration:revert      # Revert the last migration
+pnpm run migration:show        # List all migrations and their status
+pnpm run migration:generate    # Auto-generate from entity diff
+```
+
+### When NOT to migrate
+For pure code changes (no schema modifications like route fixes, new endpoints, renamed methods), no migration is needed. Only run migrations when entities change.
+
+---
+
+## 5. Ownership Checks for Protected Resources
 
 ### The Issue
 Endpoints that modify resources (PUT, DELETE) must verify the authenticated user owns the resource or has appropriate permissions.
@@ -120,7 +184,7 @@ async updateMerchant(
 
 ---
 
-## 5. Naming Conventions
+## 6. Naming Conventions
 
 ### API Documentation Alignment
 When the API documentation (PDF) specifies a name (e.g., "Merchant"), use that name in code rather than generic terms like "Business":
@@ -131,7 +195,7 @@ When the API documentation (PDF) specifies a name (e.g., "Merchant"), use that n
 
 ---
 
-## 6. ShortCode Generation
+## 7. ShortCode Generation
 
 ### Uniqueness Guarantee
 Always check for collisions when generating unique codes:
@@ -152,7 +216,7 @@ async generateUniqueShortCode(businessName: string): Promise<string> {
 
 ---
 
-## 7. PR/Commit Workflow
+## 8. PR/Commit Workflow
 
 ### Git Workflow (Per User Requirement)
 1. Push changes to `develop` branch
@@ -162,7 +226,7 @@ async generateUniqueShortCode(businessName: string): Promise<string> {
 
 ---
 
-## 8. Pre-Commit Checklist
+## 9. Pre-Commit Checklist
 
 Before pushing any code, verify:
 - [ ] `pnpm run lint` passes
@@ -172,6 +236,7 @@ Before pushing any code, verify:
 - [ ] New entities added to `data-source.ts` entities array
 - [ ] Ownership checks implemented for protected endpoints
 - [ ] Numeric enum validation uses `typeof === 'number'`
+- [ ] Migration file created/updated for every entity schema change
 
 ---
 
@@ -200,5 +265,5 @@ src/module/
 
 ---
 
-*Last Updated: 2026-05-04*
-*Version: 1.0*
+*Last Updated: 2026-05-21*
+*Version: 2.0*
