@@ -21,6 +21,7 @@ import { Role } from '../auth/enums/role.enum';
 import { Merchant } from '../merchant/entities/merchant.entity';
 import { StaffProfile } from '../staff/entities/staff-profile.entity';
 import { CustomerProfile } from '../customer/entities/customer-profile.entity';
+import { PaginationService, PaginatedResult } from '../common/pagination';
 
 /**
  * Response DTO for wallet creation
@@ -49,11 +50,9 @@ export interface TransferResponseDto {
 
 /**
  * Response DTO for transaction listing
+ * Re-export PaginatedResult<Transaction> for controller imports
  */
-export interface TransactionsListDto {
-  transactions: Transaction[];
-  total: number;
-}
+export type TransactionsListDto = PaginatedResult<Transaction>;
 
 /**
  * A single wallet entry in the staff consolidated view
@@ -107,6 +106,7 @@ export class WalletService {
     private readonly staffProfileRepository: Repository<StaffProfile>,
     @InjectRepository(CustomerProfile)
     private readonly customerProfileRepository: Repository<CustomerProfile>,
+    private readonly paginationService: PaginationService,
   ) {}
 
   /**
@@ -754,16 +754,14 @@ export class WalletService {
 
     const page = query.page || 1;
     const limit = query.limit || 20;
-    const skip = (page - 1) * limit;
 
-    const [transactions, total] = await this.transactionRepository.findAndCount({
-      where: { walletId: wallet.id },
-      order: { createdAt: 'DESC' },
-      skip,
-      take: limit,
-    });
-
-    return { transactions, total };
+    return this.paginationService.paginate(
+      this.transactionRepository,
+      { walletId: wallet.id },
+      page,
+      limit,
+      { order: { createdAt: 'DESC' } },
+    );
   }
 
   /**

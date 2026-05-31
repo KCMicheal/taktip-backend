@@ -9,6 +9,10 @@ import { HealthModule } from './health/health.module';
 import { StaffModule } from './staff/staff.module';
 import { MerchantModule } from './merchant/merchant.module';
 import { WalletModule } from './wallet/wallet.module';
+import { PaymentsModule } from './payments/payments.module';
+import { QrCodesModule } from './qrcodes/qrcodes.module';
+import { TipsModule } from './tips/tips.module';
+import { PayoutsModule } from './payouts/payouts.module';
 import { EnumTransformPipe } from './common/pipes/enum-transform.pipe';
 
 // Response schemas - defined inline to ensure they're included
@@ -177,10 +181,14 @@ async function bootstrap() {
     .addTag('auth', 'Authentication endpoints')
     .addTag('health', 'Health check endpoints')
     .addTag('staff', 'Staff dashboard and settings')
+    .addTag('qr-codes', 'QR Code generation and management')
+    .addTag('tips', 'Tip recording and queries')
+    .addTag('payments', 'Paystack payment processing and webhooks')
+    .addTag('payouts', 'Payout requests, approval, and processing (staff + admin)')
     .build();
 
   const baseDocument = SwaggerModule.createDocument(app, baseConfig, {
-    include: [AuthModule, HealthModule, StaffModule, MerchantModule, WalletModule],
+    include: [AuthModule, HealthModule, StaffModule, MerchantModule, WalletModule, PaymentsModule, QrCodesModule, TipsModule, PayoutsModule],
     deepScanRoutes: true,
   });
 

@@ -111,6 +111,11 @@ export class AuthService {
     // Send OTP email
     await this.mailService.sendOtpEmail(dto.email, otp, dto.businessName);
 
+    // Dev-mode OTP logging for E2E automation
+    if (process.env.NODE_ENV !== 'production') {
+      this.logger.log(`[DEV] OTP for ${dto.email}: ${otp}`);
+    }
+
     return {
       message: 'Registration initiated. Please verify your email with the OTP sent.',
     };
@@ -190,6 +195,11 @@ export class AuthService {
 
     // Send OTP email
     await this.mailService.sendOtpEmail(user.email, otp, user.email.split('@')[0]);
+
+    // Dev-mode OTP logging for E2E automation
+    if (process.env.NODE_ENV !== 'production') {
+      this.logger.log(`[DEV] OTP for ${user.email}: ${otp}`);
+    }
 
     return {
       message: 'New OTP sent to your email.',

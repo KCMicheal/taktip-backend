@@ -4,16 +4,23 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { parse } from 'pg-connection-string';
 import { APP_GUARD, APP_INTERCEPTOR, APP_FILTER } from '@nestjs/core';
+import { CommonModule } from './common/common.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { StaffModule } from './staff/staff.module';
 import { WalletModule } from './wallet/wallet.module';
 import { CustomerModule } from './customer/customer.module';
+import { QueueModule } from './queue/queue.module';
+import { PayoutsModule } from './payouts/payouts.module';
+import { PaymentsModule } from './payments/payments.module';
+import { QrCodesModule } from './qrcodes/qrcodes.module';
+import { TipsModule } from './tips/tips.module';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 
 @Module({
   imports: [
+    CommonModule,
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ['.env'],
@@ -68,6 +75,11 @@ import { GlobalExceptionFilter } from './common/filters/global-exception.filter'
     HealthModule,
     StaffModule,
     CustomerModule,
+    QueueModule,
+    PayoutsModule,
+    PaymentsModule,
+    QrCodesModule,
+    TipsModule,
   ],
   controllers: [],
   providers: [

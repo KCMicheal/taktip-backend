@@ -1,24 +1,9 @@
 import {
-  Injectable,
-  Logger,
-  NotFoundException,
-  BadRequestException,
-  ForbiddenException,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { ConfigService } from '@nestjs/config';
-import { randomBytes } from 'crypto';
-import * as bcrypt from 'bcrypt';
-import { StaffInvite } from '../entities/staff-invite.entity';
-import { InviteStatus } from '../../common/enums/invite-status.enum';
-import { Merchant } from '../entities/merchant.entity';
-import { User } from '../../auth/entities/user.entity';
-import { Role } from '../../auth/enums/role.enum';
-import { StaffProfile } from '../../staff/entities/staff-profile.entity';
-import { MailService } from '../../auth/services/mail.service';
-import { WalletService } from '../../wallet/wallet.service';
-import { InviteStaffDto, AcceptInviteDto } from '../dto/invite.dto';
+  PaginationService,
+  PaginatedResult,
+} from '../../common/pagination';
+import { FindOptionsWhere } from 'typeorm';
+
 
 @Injectable()
 export class InviteService {
@@ -37,6 +22,7 @@ export class InviteService {
     private readonly mailService: MailService,
     private readonly configService: ConfigService,
     private readonly walletService: WalletService,
+    private readonly paginationService: PaginationService,
   ) {}
 
   /**
@@ -301,12 +287,16 @@ export class InviteService {
   }
 
   /**
-   * Get all invites for a merchant
+   * Get all invites for a merchant, with optional status filter and pagination.
+   * Only the merchant owner (or admin) can view invites.
    */
   async getMerchantInvites(
     merchantId: string,
     userId: string,
-  ): Promise<StaffInvite[]> {
+    page: number = 1,
+    limit: number = 20,
+    status?: number,
+  ): Promise<PaginatedResult<StaffInvite>> {
     // Verify user has access to this merchant
     const merchant = await this.merchantRepository.findOne({
       where: { id: merchantId },
@@ -321,9 +311,17 @@ export class InviteService {
       throw new ForbiddenException('Not authorized to view invites for this merchant');
     }
 
-    return this.inviteRepository.find({
-      where: { merchantId },
-      order: { createdAt: 'DESC' },
-    });
+    const where: FindOptionsWhere<StaffInvite> = { merchantId };
+    if (status !== undefined) {
+      where.status = status;
+    }
+
+    return this.paginationService.paginate(
+      this.inviteRepository,
+      where,
+      page,
+      limit,
+      { order: { createdAt: 'DESC' as const } },
+    );
   }
 }

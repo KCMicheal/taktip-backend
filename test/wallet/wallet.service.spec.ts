@@ -15,11 +15,13 @@ import { TransactionStatus } from '../../src/wallet/enums/transaction-status.enu
 import { Role } from '../../src/auth/enums/role.enum';
 import { StaffProfile } from '../../src/staff/entities/staff-profile.entity';
 import { CustomerProfile } from '../../src/customer/entities/customer-profile.entity';
+import { PaginationService } from '../../src/common/pagination';
 
 describe('WalletService', () => {
   let service: WalletService;
   let walletRepository: Repository<Wallet>;
   let transactionRepository: Repository<Transaction>;
+  let paginationService: PaginationService;
 
   const mockEntityManager = {
     create: jest.fn(),
@@ -112,6 +114,12 @@ describe('WalletService', () => {
     role: Role.MERCHANT,
   };
 
+  const mockPaginationService = {
+    paginate: jest.fn(),
+    wrap: jest.fn(),
+    getSkip: jest.fn().mockReturnValue(0),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -131,6 +139,10 @@ describe('WalletService', () => {
         {
           provide: getRepositoryToken(CustomerProfile),
           useValue: mockCustomerProfileRepository,
+        },
+        {
+          provide: PaginationService,
+          useValue: mockPaginationService,
         },
       ],
     }).compile();
@@ -422,7 +434,13 @@ describe('WalletService', () => {
         createMockTransaction({ id: 'tx-1' }),
         createMockTransaction({ id: 'tx-2' }),
       ];
-      mockTransactionRepository.findAndCount.mockResolvedValue([mockTxs, 2]);
+      mockWalletRepository.findOne.mockResolvedValue(createMockWallet());
+      mockPaginationService.paginate.mockResolvedValue({
+        items: mockTxs,
+        total: 2,
+        page: 1,
+        limit: 20,
+      });
 
       const result = await service.getTransactions(
         'wallet-uuid',
@@ -430,27 +448,37 @@ describe('WalletService', () => {
         { page: 1, limit: 20 },
       );
 
-      expect(result.transactions).toHaveLength(2);
+      expect(result.items).toHaveLength(2);
       expect(result.total).toBe(2);
-      expect(mockTransactionRepository.findAndCount).toHaveBeenCalledWith({
-        where: { walletId: 'wallet-uuid' },
-        order: { createdAt: 'DESC' },
-        skip: 0,
-        take: 20,
-      });
+      expect(result.page).toBe(1);
+      expect(result.limit).toBe(20);
+      expect(mockPaginationService.paginate).toHaveBeenCalledWith(
+        expect.anything(),
+        { walletId: 'wallet-uuid' },
+        1,
+        20,
+        { order: { createdAt: 'DESC' } },
+      );
     });
 
     it('should use default pagination when not specified', async () => {
-      mockTransactionRepository.findAndCount.mockResolvedValue([[], 0]);
+      mockWalletRepository.findOne.mockResolvedValue(createMockWallet());
+      mockPaginationService.paginate.mockResolvedValue({
+        items: [],
+        total: 0,
+        page: 1,
+        limit: 20,
+      });
 
       await service.getTransactions('wallet-uuid', mockUser, {});
 
-      expect(mockTransactionRepository.findAndCount).toHaveBeenCalledWith({
-        where: { walletId: 'wallet-uuid' },
-        order: { createdAt: 'DESC' },
-        skip: 0,
-        take: 20,
-      });
+      expect(mockPaginationService.paginate).toHaveBeenCalledWith(
+        expect.anything(),
+        { walletId: 'wallet-uuid' },
+        1,
+        20,
+        { order: { createdAt: 'DESC' } },
+      );
     });
   });
 

@@ -162,8 +162,10 @@ describe('WalletController', () => {
   describe('getTransactions', () => {
     it('should return paginated transactions', async () => {
       const expectedData = {
-        transactions: [mockTransaction],
+        items: [mockTransaction],
         total: 1,
+        page: 1,
+        limit: 20,
       };
       mockWalletService.getTransactions.mockResolvedValue(expectedData);
 
@@ -184,7 +186,7 @@ describe('WalletController', () => {
     });
 
     it('should use default pagination when not specified', async () => {
-      mockWalletService.getTransactions.mockResolvedValue({ transactions: [], total: 0 });
+      mockWalletService.getTransactions.mockResolvedValue({ items: [], total: 0, page: 1, limit: 20 });
 
       await controller.getTransactions('wallet-uuid', mockUser, undefined, undefined);
 

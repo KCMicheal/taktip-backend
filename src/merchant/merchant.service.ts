@@ -5,6 +5,7 @@ import { Merchant } from './entities/merchant.entity';
 import { StaffProfile } from '../staff/entities/staff-profile.entity';
 import { BusinessType } from '../common/enums/business-type.enum';
 import { EntityStatus } from '../common/enums/entity-status.enum';
+import { PaginationService, PaginatedResult } from '../common/pagination';
 
 @Injectable()
 export class MerchantService {
@@ -15,6 +16,7 @@ export class MerchantService {
     private readonly merchantRepository: Repository<Merchant>,
     @InjectRepository(StaffProfile)
     private readonly staffProfileRepository: Repository<StaffProfile>,
+    private readonly paginationService: PaginationService,
   ) {}
 
   /**
@@ -237,32 +239,56 @@ export class MerchantService {
 
   /**
    * GET /merchant/:merchantId/staff
-   * List all staff profiles belonging to this merchant, including basic user info.
-   * Only the merchant owner can access this.
+   * List staff profiles belonging to this merchant, with optional search
+   * and pagination. Only the merchant owner can access this.
+   *
+   * Search is case-insensitive and matches against firstName, lastName,
+   * email, and employeeCode.  Results are ordered by createdAt DESC.
    */
-  async getMerchantStaff(merchantId: string): Promise<
-    Array<{
-      id: string;
-      userId: string;
-      firstName: string | null;
-      lastName: string | null;
-      email: string;
-      phone: string | null;
-      displayName: string | null;
-      roleTag: string | null;
-      employeeCode: string | null;
-      isActive: boolean;
-      isClockedIn: boolean;
-      createdAt: Date;
-    }>
-  > {
-    const profiles = await this.staffProfileRepository.find({
-      where: { merchantId },
-      relations: ['user'],
-      order: { createdAt: 'DESC' },
-    });
+  async getMerchantStaff(
+    merchantId: string,
+    search?: string,
+    page: number = 1,
+    limit: number = 20,
+  ): Promise<PaginatedResult<{
+    id: string;
+    userId: string;
+    firstName: string | null;
+    lastName: string | null;
+    email: string;
+    phone: string | null;
+    displayName: string | null;
+    roleTag: string | null;
+    employeeCode: string | null;
+    isActive: boolean;
+    isClockedIn: boolean;
+    createdAt: Date;
+  }>> {
+    const qb = this.staffProfileRepository
+      .createQueryBuilder('sp')
+      .leftJoinAndSelect('sp.user', 'u')
+      .where('sp.merchantId = :merchantId', { merchantId });
 
-    return profiles.map((profile) => ({
+    // Apply search filter (case-insensitive, partial match)
+    if (search) {
+      qb.andWhere(
+        '(LOWER(u.firstName) LIKE :search OR ' +
+        'LOWER(u.lastName) LIKE :search OR ' +
+        'LOWER(u.email) LIKE :search OR ' +
+        'LOWER(sp.employeeCode) LIKE :search)',
+        { search: `%${search.toLowerCase()}%` },
+      );
+    }
+
+    qb.orderBy('sp.createdAt', 'DESC');
+
+    const skip = this.paginationService.getSkip(page, limit);
+    const [profiles, total] = await qb
+      .skip(skip)
+      .take(limit)
+      .getManyAndCount();
+
+    const items = profiles.map((profile) => ({
       id: profile.id,
       userId: profile.userId,
       firstName: profile.user?.firstName ?? null,
@@ -276,5 +302,7 @@ export class MerchantService {
       isClockedIn: profile.isClockedIn,
       createdAt: profile.createdAt,
     }));
+
+    return this.paginationService.wrap(items, total, page, limit);
   }
 }

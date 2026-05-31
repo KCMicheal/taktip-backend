@@ -30,3 +30,9 @@ coverage/
 
 # Planning & Analysis Docs (not committed)
 .notes/
+
+# Postman API client artifacts (managed locally, excluded from CI/CD)
+.postman/
+postman/
+docs/TakTip-E2E-Collection.json
+docs/TakTip-Local-Environment.json

@@ -1,0 +1,162 @@
+import {
+  Injectable,
+  Logger,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, In, IsNull } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
+import { randomBytes } from 'crypto';
+import * as QRCode from 'qrcode';
+import { QrCode } from './entities/qrcode.entity';
+import { GenerateQrCodeDto } from './dto/generate-qrcode.dto';
+
+@Injectable()
+export class QrCodesService {
+  private readonly logger = new Logger(QrCodesService.name);
+
+  constructor(
+    @InjectRepository(QrCode)
+    private readonly qrCodeRepository: Repository<QrCode>,
+    private readonly configService: ConfigService,
+  ) {}
+
+  /**
+   * Generate a unique 8-character hex short code.
+   * Checks the database for collisions before returning.
+   */
+  async generateShortCode(): Promise<string> {
+    const maxAttempts = 10;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const shortCode = randomBytes(4).toString('hex');
+      const existing = await this.qrCodeRepository.findOne({
+        where: { shortCode },
+      });
+      if (!existing) {
+        return shortCode;
+      }
+    }
+
+    throw new ConflictException('Unable to generate unique short code');
+  }
+
+  /**
+   * Generate a new QR code for a merchant.
+   * Creates a short code, builds the tip URL, generates a QR code image
+   * data URL, and persists the record.
+   */
+  async generateQrCode(
+    merchantId: string,
+    dto: GenerateQrCodeDto,
+  ): Promise<{ qrCode: QrCode; qrDataUrl: string }> {
+    const shortCode = await this.generateShortCode();
+    const appUrl = this.configService.get<string>(
+      'APP_URL',
+      'https://app.taktip.com',
+    );
+    const url = `${appUrl}/tip/${shortCode}`;
+
+    // Generate the QR code as a data URL (base64 PNG)
+    const qrDataUrl = await QRCode.toDataURL(url, {
+      width: 400,
+      margin: 2,
+      color: {
+        dark: '#000000',
+        light: '#ffffff',
+      },
+    });
+
+    const qrCode = this.qrCodeRepository.create({
+      merchantId,
+      staffProfileId: dto.staffProfileId || null,
+      shortCode,
+      url,
+      isActive: true,
+      metadata: dto.metadata || null,
+    } as Partial<QrCode>);
+
+    const saved = await this.qrCodeRepository.save(qrCode);
+
+    this.logger.log(
+      `QR code generated for merchant ${merchantId} (shortCode: ${shortCode})`,
+    );
+
+    return { qrCode: saved, qrDataUrl };
+  }
+
+  /**
+   * Look up a QR code by its short code. Used by the public tip resolution endpoint.
+   */
+  async findByShortCode(shortCode: string): Promise<QrCode | null> {
+    return this.qrCodeRepository.findOne({
+      where: { shortCode, isActive: true },
+    });
+  }
+
+  /**
+   * List all QR codes belonging to a merchant.
+   */
+  async findByMerchant(merchantId: string): Promise<QrCode[]> {
+    return this.qrCodeRepository.find({
+      where: { merchantId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  /**
+   * List all QR codes linked to a staff profile (personal QR codes).
+   */
+  async findByStaffProfile(staffProfileId: string): Promise<QrCode[]> {
+    return this.qrCodeRepository.find({
+      where: { staffProfileId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  /**
+   * List all QR codes belonging to one or more merchants that are accessible
+   * to a staff member. Includes merchant-wide codes (staffProfileId = null)
+   * and codes specifically linked to the staff's profiles.
+   */
+  async findByMerchantForStaff(
+    merchantIds: string[],
+    staffProfileIds?: string[],
+  ): Promise<QrCode[]> {
+    if (staffProfileIds && staffProfileIds.length > 0) {
+      return this.qrCodeRepository.find({
+        where: [
+          { merchantId: In(merchantIds), staffProfileId: IsNull() as any },    // merchant-wide codes
+          ...staffProfileIds.map((id) => ({ merchantId: In(merchantIds), staffProfileId: id })), // personal codes
+        ],
+        order: { createdAt: 'DESC' },
+      });
+    }
+    return this.qrCodeRepository.find({
+      where: { merchantId: In(merchantIds) },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  /**
+   * Deactivate a QR code by ID. Verifies the merchant owns the QR code.
+   */
+  async deactivate(id: string, merchantId: string): Promise<void> {
+    const qrCode = await this.qrCodeRepository.findOne({
+      where: { id },
+    });
+
+    if (!qrCode) {
+      throw new NotFoundException('QR code not found');
+    }
+
+    if (qrCode.merchantId !== merchantId) {
+      throw new NotFoundException('QR code not found');
+    }
+
+    await this.qrCodeRepository.update(id, { isActive: false });
+
+    this.logger.log(`QR code ${id} deactivated by merchant ${merchantId}`);
+  }
+}

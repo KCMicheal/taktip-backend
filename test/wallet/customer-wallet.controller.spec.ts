@@ -139,19 +139,19 @@ describe('CustomerWalletController', () => {
 
       mockCustomerService.getOrCreateProfile.mockResolvedValue(mockCustomerProfile);
       mockWalletService.getOrCreateCustomerWallet.mockResolvedValue(mockWallet);
-      mockWalletService.getTransactions.mockResolvedValue({ transactions: mockTransactions, total: 2 });
+      mockWalletService.getTransactions.mockResolvedValue({ items: mockTransactions, total: 2, page: 1, limit: 20 });
 
       const result = await controller.getMyTransactions(mockUser, '1', '20');
 
       expect(result.status).toBe('success');
-      expect(result.data.transactions).toHaveLength(2);
+      expect(result.data.items).toHaveLength(2);
       expect(result.data.total).toBe(2);
     });
 
     it('should use default pagination when not provided', async () => {
       mockCustomerService.getOrCreateProfile.mockResolvedValue(mockCustomerProfile);
       mockWalletService.getOrCreateCustomerWallet.mockResolvedValue(mockWallet);
-      mockWalletService.getTransactions.mockResolvedValue({ transactions: [], total: 0 });
+      mockWalletService.getTransactions.mockResolvedValue({ items: [], total: 0, page: 1, limit: 20 });
 
       await controller.getMyTransactions(mockUser, undefined, undefined);
 

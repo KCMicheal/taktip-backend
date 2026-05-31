@@ -2,6 +2,7 @@ import { Controller, Get, Query, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { InviteService } from '../services/invite.service';
 import { Public } from '../../auth/decorators/public.decorator';
+import { ErrorResponseDto } from '../../auth/dto/response.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -42,8 +43,8 @@ export class AuthInviteController {
       },
     },
   })
-  @ApiResponse({ status: 400, description: 'Invalid, expired, or already used invite token' })
-  @ApiResponse({ status: 404, description: 'Invite token not found' })
+  @ApiResponse({ status: 400, description: 'Invalid, expired, or already used invite token', type: ErrorResponseDto })
+  @ApiResponse({ status: 404, description: 'Invite token not found', type: ErrorResponseDto })
   async getInviteByToken(@Query('token') token: string) {
     const invite = await this.inviteService.validateToken(token);
     return {
