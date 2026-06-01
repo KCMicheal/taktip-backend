@@ -5,7 +5,9 @@ import { Repository } from 'typeorm';
 import { createHmac } from 'crypto';
 import { PaystackService } from '../../src/payments/paystack.service';
 import { Payment } from '../../src/payments/entities/payment.entity';
+import { PaymentStatus } from '../../src/payments/enums/payment-status.enum';
 import { Tip } from '../../src/tips/entities/tip.entity';
+import { TipStatus } from '../../src/tips/enums/tip-status.enum';
 import { Wallet } from '../../src/wallet/entities/wallet.entity';
 
 // Mock the paystack-api library
