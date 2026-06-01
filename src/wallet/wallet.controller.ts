@@ -16,6 +16,7 @@ import {
 } from '@nestjs/swagger';
 import { WalletService, TransactionResponseDto, TransferResponseDto, TransactionsListDto } from './wallet.service';
 import { Wallet } from './entities/wallet.entity';
+import { Transaction } from './entities/transaction.entity';
 import { CreateWalletDto } from './dto/create-wallet.dto';
 import { DepositDto } from './dto/deposit.dto';
 import { WithdrawDto } from './dto/withdraw.dto';
@@ -44,7 +45,29 @@ export class WalletController {
 
   @Post()
   @ApiOperation({ summary: 'Create a wallet for a polymorphic owner' })
-  @ApiResponse({ status: 201, description: 'Wallet created successfully' })
+  @ApiResponse({
+    status: 201,
+    description: 'Wallet created successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            ownerId: { type: 'string', format: 'uuid' },
+            ownerType: { type: 'string', example: 'merchant' },
+            balancePending: { type: 'number', example: 0 },
+            balanceAvailable: { type: 'number', example: 0 },
+            balanceProcessing: { type: 'number', example: 0 },
+            currency: { type: 'string', example: 'NGN' },
+            createdAt: { type: 'string', format: 'date-time' },
+          },
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 409, description: 'Wallet already exists for this owner' })
   async createWallet(
     @CurrentUser() user: { sub: string; role: Role },
@@ -56,7 +79,29 @@ export class WalletController {
 
   @Get(':walletId')
   @ApiOperation({ summary: 'Get wallet by ID' })
-  @ApiResponse({ status: 200, description: 'Wallet found' })
+  @ApiResponse({
+    status: 200,
+    description: 'Wallet details',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            ownerId: { type: 'string', format: 'uuid' },
+            ownerType: { type: 'string', example: 'merchant' },
+            balancePending: { type: 'number', example: 0 },
+            balanceAvailable: { type: 'number', example: 10000 },
+            balanceProcessing: { type: 'number', example: 0 },
+            currency: { type: 'string', example: 'NGN' },
+            createdAt: { type: 'string', format: 'date-time' },
+          },
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 404, description: 'Wallet not found' })
   async getWallet(
     @Param('walletId') walletId: string,
@@ -68,7 +113,29 @@ export class WalletController {
 
   @Get('merchant/:merchantId')
   @ApiOperation({ summary: 'Get wallet by merchant ID' })
-  @ApiResponse({ status: 200, description: 'Wallet found' })
+  @ApiResponse({
+    status: 200,
+    description: 'Merchant wallet details',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            ownerId: { type: 'string', format: 'uuid' },
+            ownerType: { type: 'string', example: 'merchant' },
+            balancePending: { type: 'number', example: 5000 },
+            balanceAvailable: { type: 'number', example: 10000 },
+            balanceProcessing: { type: 'number', example: 0 },
+            currency: { type: 'string', example: 'NGN' },
+            createdAt: { type: 'string', format: 'date-time' },
+          },
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 404, description: 'Wallet not found for this merchant' })
   async getMerchantWallet(
     @Param('merchantId') merchantId: string,
@@ -80,7 +147,44 @@ export class WalletController {
 
   @Post('deposit')
   @ApiOperation({ summary: 'Deposit to wallet' })
-  @ApiResponse({ status: 201, description: 'Deposit completed' })
+  @ApiResponse({
+    status: 201,
+    description: 'Deposit completed',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            wallet: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', format: 'uuid' },
+                balancePending: { type: 'number', example: 0 },
+                balanceAvailable: { type: 'number', example: 15000 },
+                balanceProcessing: { type: 'number', example: 0 },
+                currency: { type: 'string', example: 'NGN' },
+              },
+            },
+            transaction: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', format: 'uuid' },
+                type: { type: 'number', example: 1 },
+                amount: { type: 'number', example: 5000 },
+                fee: { type: 'number', example: 0 },
+                reference: { type: 'string', example: 'DEP-1712345678-abc' },
+                description: { type: 'string', example: 'Wallet deposit' },
+                transactionStatus: { type: 'number', example: 2 },
+                createdAt: { type: 'string', format: 'date-time' },
+              },
+            },
+          },
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 400, description: 'Invalid deposit amount' })
   @ApiResponse({ status: 403, description: 'Access denied: Admin role required' })
   async deposit(
@@ -93,7 +197,42 @@ export class WalletController {
 
   @Post('withdraw')
   @ApiOperation({ summary: 'Withdraw from wallet' })
-  @ApiResponse({ status: 201, description: 'Withdrawal completed' })
+  @ApiResponse({
+    status: 201,
+    description: 'Withdrawal completed',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            wallet: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', format: 'uuid' },
+                balanceAvailable: { type: 'number', example: 10000 },
+                currency: { type: 'string', example: 'NGN' },
+              },
+            },
+            transaction: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', format: 'uuid' },
+                type: { type: 'number', example: 2 },
+                amount: { type: 'number', example: 5000 },
+                fee: { type: 'number', example: 0 },
+                reference: { type: 'string', example: 'WTH-1712345678-abc' },
+                description: { type: 'string', example: 'Wallet withdrawal' },
+                transactionStatus: { type: 'number', example: 2 },
+                createdAt: { type: 'string', format: 'date-time' },
+              },
+            },
+          },
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 400, description: 'Insufficient balance or invalid amount' })
   @ApiResponse({ status: 403, description: 'Access denied: Admin role required' })
   async withdraw(
@@ -108,7 +247,42 @@ export class WalletController {
   @ApiOperation({ summary: 'List wallet transactions' })
   @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
   @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default: 20)' })
-  @ApiResponse({ status: 200, description: 'List of transactions' })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated list of wallet transactions',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            items: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                  type: { type: 'number', example: 1 },
+                  amount: { type: 'number', example: 5000 },
+                  fee: { type: 'number', example: 0 },
+                  balanceBefore: { type: 'number', example: 10000 },
+                  balanceAfter: { type: 'number', example: 15000 },
+                  reference: { type: 'string', example: 'DEP-1712345678-abc' },
+                  description: { type: 'string', example: 'Wallet deposit' },
+                  transactionStatus: { type: 'number', example: 2 },
+                  createdAt: { type: 'string', format: 'date-time' },
+                },
+              },
+            },
+            total: { type: 'number', example: 42 },
+            page: { type: 'number', example: 1 },
+            limit: { type: 'number', example: 20 },
+          },
+        },
+      },
+    },
+  })
   async getTransactions(
     @Param('walletId') walletId: string,
     @CurrentUser() user: { sub: string; role: Role },
@@ -126,7 +300,57 @@ export class WalletController {
 
   @Post('transfer')
   @ApiOperation({ summary: 'Transfer between wallets' })
-  @ApiResponse({ status: 201, description: 'Transfer completed' })
+  @ApiResponse({
+    status: 201,
+    description: 'Transfer completed',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            sourceWallet: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', format: 'uuid' },
+                balanceAvailable: { type: 'number', example: 5000 },
+              },
+            },
+            destWallet: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', format: 'uuid' },
+                balanceAvailable: { type: 'number', example: 15000 },
+              },
+            },
+            sourceTx: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', format: 'uuid' },
+                type: { type: 'number', example: 3 },
+                amount: { type: 'number', example: 5000 },
+                reference: { type: 'string', example: 'TRF-1712345678-abc' },
+                transactionStatus: { type: 'number', example: 2 },
+                createdAt: { type: 'string', format: 'date-time' },
+              },
+            },
+            destTx: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', format: 'uuid' },
+                type: { type: 'number', example: 4 },
+                amount: { type: 'number', example: 5000 },
+                reference: { type: 'string', example: 'TRF-1712345678-def' },
+                transactionStatus: { type: 'number', example: 2 },
+                createdAt: { type: 'string', format: 'date-time' },
+              },
+            },
+          },
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 400, description: 'Invalid transfer parameters or insufficient balance' })
   @ApiResponse({ status: 403, description: 'Access denied: Admin role required' })
   async transfer(

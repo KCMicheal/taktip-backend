@@ -67,6 +67,33 @@ export class AuthController {
   @ApiResponse({
     status: 201,
     description: 'Staff registration successful',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            user: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', format: 'uuid' },
+                email: { type: 'string', example: 'staff@example.com' },
+                role: { type: 'string', example: 'STAFF' },
+              },
+            },
+            merchant: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', format: 'uuid' },
+                businessName: { type: 'string', example: "Joe's Restaurant" },
+              },
+            },
+          },
+        },
+        message: { type: 'string', example: 'Staff registration successful. You can now log in.' },
+      },
+    },
   })
   @ApiResponse({ status: 400, description: 'Invalid or expired invite token', type: ErrorResponseDto })
   @ApiResponse({ status: 404, description: 'Invalid invite token', type: ErrorResponseDto })

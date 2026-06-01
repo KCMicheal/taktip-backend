@@ -12,6 +12,7 @@ import { WalletService } from '../../../src/wallet/wallet.service';
 import { Role } from '../../../src/auth/enums/role.enum';
 import { InviteStatus } from '../../../src/common/enums/invite-status.enum';
 import { InviteStaffDto, AcceptInviteDto } from '../../../src/merchant/dto/invite.dto';
+import { PaginationService } from '../../../src/common/pagination';
 
 describe('InviteService', () => {
   let service: InviteService;
@@ -55,6 +56,12 @@ describe('InviteService', () => {
     createStaffWallet: jest.fn().mockResolvedValue({ id: 'wallet-uuid' }),
   };
 
+  const mockPaginationService = {
+    paginate: jest.fn(),
+    wrap: jest.fn(),
+    getSkip: jest.fn().mockReturnValue(0),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -86,6 +93,10 @@ describe('InviteService', () => {
         {
           provide: WalletService,
           useValue: mockWalletService,
+        },
+        {
+          provide: PaginationService,
+          useValue: mockPaginationService,
         },
       ],
     }).compile();

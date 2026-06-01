@@ -1,11 +1,13 @@
-import { Controller, Get, Put, Post, Param, Body, UseGuards, ParseUUIDPipe, ForbiddenException } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiBody } from '@nestjs/swagger';
+import { Controller, Get, Put, Post, Param, Body, Query, UseGuards, ParseUUIDPipe, ForbiddenException } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { ErrorResponseDto } from '../auth/dto/response.dto';
 import { MerchantService } from './merchant.service';
 import { InviteService } from './services/invite.service';
 import { InviteStaffDto } from './dto/invite.dto';
 import { UpdateMerchantDto } from './dto/update-merchant.dto';
+import { SearchablePaginationParamsDto, InvitePaginationParamsDto } from '../common/pagination';
 
 @ApiTags('merchant')
 @ApiBearerAuth()
@@ -19,6 +21,29 @@ export class MerchantController {
 
   @Get('me')
   @ApiOperation({ summary: 'Get current user merchants' })
+  @ApiResponse({
+    status: 200,
+    description: 'List of merchants owned by the authenticated user',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', format: 'uuid' },
+              businessName: { type: 'string', example: "Joe's Restaurant" },
+              businessType: { type: 'string', example: 'Restaurant' },
+              shortCode: { type: 'string', example: 'CODE123456-GR' },
+              isActive: { type: 'boolean', example: true },
+            },
+          },
+        },
+      },
+    },
+  })
   async getMyMerchants(@CurrentUser() user: { sub: string }) {
     const merchants = await this.merchantService.getMerchantsByOwnerId(user.sub);
     return { status: 'success', data: merchants };
@@ -27,6 +52,28 @@ export class MerchantController {
   @Get(':id')
   @ApiOperation({ summary: 'Get merchant by ID' })
   @ApiParam({ name: 'id', description: 'Merchant UUID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Merchant details',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            businessName: { type: 'string', example: "Joe's Restaurant" },
+            businessType: { type: 'string', example: 'Restaurant' },
+            shortCode: { type: 'string', example: 'CODE123456-GR' },
+            isActive: { type: 'boolean', example: true },
+            ownerId: { type: 'string', format: 'uuid' },
+            createdAt: { type: 'string', format: 'date-time' },
+          },
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 404, description: 'Merchant not found' })
   async getMerchantById(@Param('id', ParseUUIDPipe) id: string) {
     const merchant = await this.merchantService.getMerchantById(id);
@@ -36,6 +83,24 @@ export class MerchantController {
   @Get('shortCode/:code')
   @ApiOperation({ summary: 'Lookup merchant by short code' })
   @ApiParam({ name: 'code', description: 'Merchant short code (e.g., CODE123456-GR)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Merchant details for the short code',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            businessName: { type: 'string', example: "Joe's Restaurant" },
+            businessType: { type: 'string', example: 'Restaurant' },
+          },
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 404, description: 'Merchant not found' })
   async getMerchantByShortCode(@Param('code') shortCode: string) {
     const merchant = await this.merchantService.getMerchantByShortCode(shortCode);
@@ -45,8 +110,28 @@ export class MerchantController {
   @Put(':id')
   @ApiOperation({ summary: 'Update merchant details' })
   @ApiParam({ name: 'id', description: 'Merchant UUID' })
-  @ApiResponse({ status: 404, description: 'Merchant not found' })
+  @ApiResponse({
+    status: 200,
+    description: 'Merchant updated successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            businessName: { type: 'string', example: "Joe's Restaurant" },
+            businessType: { type: 'string', example: 'Restaurant' },
+            shortCode: { type: 'string', example: 'CODE123456-GR' },
+            isActive: { type: 'boolean', example: true },
+          },
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 403, description: 'Not authorized to update this merchant' })
+  @ApiResponse({ status: 404, description: 'Merchant not found' })
   async updateMerchant(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateMerchantDto,
@@ -68,6 +153,29 @@ export class MerchantController {
   @Get('owner/:ownerId')
   @ApiOperation({ summary: 'Get all merchants for an owner' })
   @ApiParam({ name: 'ownerId', description: 'Owner user UUID' })
+  @ApiResponse({
+    status: 200,
+    description: 'List of merchants for the owner',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', format: 'uuid' },
+              businessName: { type: 'string', example: "Joe's Restaurant" },
+              businessType: { type: 'string', example: 'Restaurant' },
+              isActive: { type: 'boolean', example: true },
+            },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Invalid owner ID' })
   async getMerchantsByOwner(@Param('ownerId', ParseUUIDPipe) ownerId: string) {
     const merchants = await this.merchantService.getMerchantsByOwnerId(ownerId);
     return { status: 'success', data: merchants };
@@ -77,7 +185,27 @@ export class MerchantController {
   @ApiOperation({ summary: 'Invite a staff member to join the merchant' })
   @ApiParam({ name: 'merchantId', description: 'Merchant UUID' })
   @ApiBody({ type: InviteStaffDto })
-  @ApiResponse({ status: 201, description: 'Invite sent successfully' })
+  @ApiResponse({
+    status: 201,
+    description: 'Invite sent successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        message: { type: 'string', example: 'Invite sent successfully' },
+        data: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            email: { type: 'string', example: 'staff@example.com' },
+            token: { type: 'string', example: 'invite-token-abc123' },
+            status: { type: 'string', example: 'PENDING' },
+            expiresAt: { type: 'string', format: 'date-time' },
+          },
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 403, description: 'Not authorized to invite staff for this merchant' })
   @ApiResponse({ status: 404, description: 'Merchant not found' })
   async inviteStaff(
@@ -98,14 +226,49 @@ export class MerchantController {
   }
 
   @Get(':merchantId/invites')
-  @ApiOperation({ summary: 'Get all invites for a merchant' })
+  @ApiOperation({ summary: 'Get invites for a merchant (paginated, filterable)' })
   @ApiParam({ name: 'merchantId', description: 'Merchant UUID' })
-  @ApiResponse({ status: 200, description: 'List of invites' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default: 20)' })
+  @ApiQuery({ name: 'status', required: false, type: Number, description: 'Filter by status (1 = PENDING, 2 = ACCEPTED)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated list of invites for the merchant',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            items: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                  email: { type: 'string', example: 'staff@example.com' },
+                  status: { type: 'number', example: 1 },
+                  token: { type: 'string', example: 'invite-token-abc123' },
+                  expiresAt: { type: 'string', format: 'date-time' },
+                  createdAt: { type: 'string', format: 'date-time' },
+                },
+              },
+            },
+            total: { type: 'number', example: 15 },
+            page: { type: 'number', example: 1 },
+            limit: { type: 'number', example: 20 },
+          },
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 403, description: 'Not authorized to view invites for this merchant' })
   @ApiResponse({ status: 404, description: 'Merchant not found' })
   async getMerchantInvites(
     @Param('merchantId', ParseUUIDPipe) merchantId: string,
     @CurrentUser() user: { sub: string },
+    @Query() params: InvitePaginationParamsDto,
   ) {
     // Get the merchant to check ownership
     const merchant = await this.merchantService.getMerchantById(merchantId);
@@ -115,7 +278,13 @@ export class MerchantController {
       throw new ForbiddenException('Not authorized to view invites for this merchant');
     }
 
-    const invites = await this.inviteService.getMerchantInvites(merchantId, user.sub);
+    const invites = await this.inviteService.getMerchantInvites(
+      merchantId,
+      user.sub,
+      params.page,
+      params.limit,
+      params.status,
+    );
     return { status: 'success', data: invites };
   }
 
@@ -166,21 +335,57 @@ export class MerchantController {
 
   @Get(':merchantId/staff')
   @ApiOperation({
-    summary: 'List staff under a merchant',
+    summary: 'List staff under a merchant (paginated, searchable)',
     description:
-      'Returns all staff profiles belonging to a merchant, including ' +
-      'basic user info (name, email, phone). Only the merchant owner can access this.',
+      'Returns staff profiles belonging to a merchant, including ' +
+      'basic user info (name, email, phone). Supports search and pagination. ' +
+      'Only the merchant owner can access this.',
   })
   @ApiParam({ name: 'merchantId', description: 'Merchant UUID' })
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Search by name, email, or employeeCode (case-insensitive, partial match)' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default: 20)' })
   @ApiResponse({
     status: 200,
-    description: 'List of staff members under this merchant',
+    description: 'Paginated list of staff members',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            items: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                  userId: { type: 'string', format: 'uuid' },
+                  firstName: { type: 'string', example: 'John' },
+                  lastName: { type: 'string', example: 'Doe' },
+                  email: { type: 'string', example: 'staff@example.com' },
+                  phone: { type: 'string', nullable: true, example: '+2348012345678' },
+                  isActive: { type: 'boolean', example: true },
+                  employeeCode: { type: 'string', example: 'EMP-001', nullable: true },
+                  createdAt: { type: 'string', format: 'date-time' },
+                },
+              },
+            },
+            total: { type: 'number', example: 47 },
+            page: { type: 'number', example: 1 },
+            limit: { type: 'number', example: 20 },
+          },
+        },
+      },
+    },
   })
   @ApiResponse({ status: 403, description: 'Not authorized to view staff for this merchant' })
   @ApiResponse({ status: 404, description: 'Merchant not found' })
   async getMerchantStaff(
     @Param('merchantId', ParseUUIDPipe) merchantId: string,
     @CurrentUser() user: { sub: string },
+    @Query() params: SearchablePaginationParamsDto,
   ) {
     // Get the merchant to check ownership
     const merchant = await this.merchantService.getMerchantById(merchantId);
@@ -190,7 +395,12 @@ export class MerchantController {
       throw new ForbiddenException('Not authorized to view staff for this merchant');
     }
 
-    const staff = await this.merchantService.getMerchantStaff(merchantId);
+    const staff = await this.merchantService.getMerchantStaff(
+      merchantId,
+      params.search,
+      params.page,
+      params.limit,
+    );
     return { status: 'success', data: staff };
   }
 }

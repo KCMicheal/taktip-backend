@@ -15,6 +15,7 @@ import {
 } from '@nestjs/swagger';
 import { WalletService, TransactionResponseDto, TransactionsListDto } from './wallet.service';
 import { Wallet } from './entities/wallet.entity';
+import { Transaction } from './entities/transaction.entity';
 import { CustomerDepositDto } from './dto/customer-deposit.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -53,7 +54,29 @@ export class CustomerWalletController {
 
   @Get()
   @ApiOperation({ summary: "Get the customer's own wallet (creates one if none exists)" })
-  @ApiResponse({ status: 200, description: 'Customer wallet found or created' })
+  @ApiResponse({
+    status: 200,
+    description: 'Customer wallet details',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            ownerId: { type: 'string', format: 'uuid' },
+            ownerType: { type: 'string', example: 'customer' },
+            balancePending: { type: 'number', example: 0 },
+            balanceAvailable: { type: 'number', example: 5000 },
+            balanceProcessing: { type: 'number', example: 0 },
+            currency: { type: 'string', example: 'NGN' },
+            createdAt: { type: 'string', format: 'date-time' },
+          },
+        },
+      },
+    },
+  })
   async getMyWallet(
     @CurrentUser() user: { sub: string; role: Role },
   ): Promise<SuccessResponseDto<Wallet>> {
@@ -63,7 +86,42 @@ export class CustomerWalletController {
 
   @Post('deposit')
   @ApiOperation({ summary: "Deposit funds to the customer's own wallet (creates wallet if none exists)" })
-  @ApiResponse({ status: 201, description: 'Deposit completed' })
+  @ApiResponse({
+    status: 201,
+    description: 'Deposit completed',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            wallet: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', format: 'uuid' },
+                balanceAvailable: { type: 'number', example: 10000 },
+                currency: { type: 'string', example: 'NGN' },
+              },
+            },
+            transaction: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', format: 'uuid' },
+                type: { type: 'number', example: 1 },
+                amount: { type: 'number', example: 5000 },
+                fee: { type: 'number', example: 0 },
+                reference: { type: 'string', example: 'DEP-1712345678-abc' },
+                description: { type: 'string', example: 'Customer deposit' },
+                transactionStatus: { type: 'number', example: 2 },
+                createdAt: { type: 'string', format: 'date-time' },
+              },
+            },
+          },
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 400, description: 'Invalid deposit amount' })
   async deposit(
     @CurrentUser() user: { sub: string; role: Role },
@@ -83,7 +141,42 @@ export class CustomerWalletController {
   @ApiOperation({ summary: "List the customer's wallet transactions" })
   @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
   @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default: 20)' })
-  @ApiResponse({ status: 200, description: 'List of transactions' })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated list of customer wallet transactions',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            items: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                  type: { type: 'number', example: 1 },
+                  amount: { type: 'number', example: 5000 },
+                  fee: { type: 'number', example: 0 },
+                  balanceBefore: { type: 'number', example: 5000 },
+                  balanceAfter: { type: 'number', example: 10000 },
+                  reference: { type: 'string', example: 'DEP-1712345678-abc' },
+                  description: { type: 'string', example: 'Customer deposit' },
+                  transactionStatus: { type: 'number', example: 2 },
+                  createdAt: { type: 'string', format: 'date-time' },
+                },
+              },
+            },
+            total: { type: 'number', example: 10 },
+            page: { type: 'number', example: 1 },
+            limit: { type: 'number', example: 20 },
+          },
+        },
+      },
+    },
+  })
   async getMyTransactions(
     @CurrentUser() user: { sub: string; role: Role },
     @Query('page') page?: string,

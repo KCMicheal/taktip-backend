@@ -12,6 +12,7 @@ import {
   ApiQuery,
   ApiResponse,
 } from '@nestjs/swagger';
+import { Transaction } from './entities/transaction.entity';
 import {
   WalletService,
   StaffConsolidatedWalletsDto,
@@ -41,7 +42,42 @@ export class StaffWalletController {
 
   @Get()
   @ApiOperation({ summary: 'Get consolidated staff wallet view across all merchants' })
-  @ApiResponse({ status: 200, description: 'Consolidated wallet view' })
+  @ApiResponse({
+    status: 200,
+    description: 'Consolidated staff wallet view across all merchants',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            wallets: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  merchantName: { type: 'string', example: "Joe's Restaurant" },
+                  merchantShortCode: { type: 'string', example: 'CODE123456-GR' },
+                  balanceAvailable: { type: 'number', example: 5000 },
+                  balancePending: { type: 'number', example: 2000 },
+                  balanceProcessing: { type: 'number', example: 0 },
+                },
+              },
+            },
+            totalBalances: {
+              type: 'object',
+              properties: {
+                balanceAvailable: { type: 'number', example: 15000 },
+                balancePending: { type: 'number', example: 5000 },
+                balanceProcessing: { type: 'number', example: 0 },
+              },
+            },
+          },
+        },
+      },
+    },
+  })
   async getMyWallets(
     @CurrentUser() user: { sub: string; role: Role },
   ): Promise<SuccessResponseDto<StaffConsolidatedWalletsDto>> {
@@ -53,7 +89,42 @@ export class StaffWalletController {
   @ApiOperation({ summary: 'List transactions for a specific staff wallet' })
   @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
   @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default: 20)' })
-  @ApiResponse({ status: 200, description: 'List of transactions' })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated list of staff wallet transactions',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            items: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                  type: { type: 'number', example: 1 },
+                  amount: { type: 'number', example: 500 },
+                  fee: { type: 'number', example: 25 },
+                  balanceBefore: { type: 'number', example: 5000 },
+                  balanceAfter: { type: 'number', example: 5475 },
+                  reference: { type: 'string', example: 'TIP-1712345678-abc' },
+                  description: { type: 'string', example: 'Staff tip credit' },
+                  transactionStatus: { type: 'number', example: 2 },
+                  createdAt: { type: 'string', format: 'date-time' },
+                },
+              },
+            },
+            total: { type: 'number', example: 25 },
+            page: { type: 'number', example: 1 },
+            limit: { type: 'number', example: 20 },
+          },
+        },
+      },
+    },
+  })
   async getWalletTransactions(
     @Param('walletId') walletId: string,
     @CurrentUser() user: { sub: string; role: Role },

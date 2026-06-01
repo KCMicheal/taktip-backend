@@ -265,5 +265,5 @@ src/module/
 
 ---
 
-*Last Updated: 2026-05-21*
-*Version: 2.0*
+*Last Updated: 2026-05-31*
+*Version: 2.1 — Phase 5 completion, Staff partial status, gap analysis added*

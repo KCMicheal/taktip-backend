@@ -20,6 +20,7 @@ import { PayoutMethodDto } from './dto/payout-method.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Role } from '../auth/enums/role.enum';
+import { ErrorResponseDto } from '../auth/dto/response.dto';
 
 /**
  * Response wrapper for dashboard endpoint
@@ -73,7 +74,7 @@ export class StaffController {
     description: 'List of staff profiles',
     type: ProfilesListResponseDto,
   })
-  @ApiResponse({ status: 403, description: 'Access denied: Staff role required' })
+  @ApiResponse({ status: 403, description: 'Access denied: Staff role required', type: ErrorResponseDto })
   async getProfiles(
     @CurrentUser() user: { sub: string; role: Role },
   ): Promise<ProfilesListResponseDto> {
@@ -99,9 +100,9 @@ export class StaffController {
     description: 'Staff dashboard data',
     type: DashboardResponseDto,
   })
-  @ApiResponse({ status: 400, description: 'Multiple profiles found — merchantId required' })
-  @ApiResponse({ status: 403, description: 'Access denied: Staff role required' })
-  @ApiResponse({ status: 404, description: 'Staff profile not found' })
+  @ApiResponse({ status: 400, description: 'Multiple profiles found — merchantId required', type: ErrorResponseDto })
+  @ApiResponse({ status: 403, description: 'Access denied: Staff role required', type: ErrorResponseDto })
+  @ApiResponse({ status: 404, description: 'Staff profile not found', type: ErrorResponseDto })
   async getDashboard(
     @CurrentUser() user: { sub: string; role: Role },
     @Query('merchantId') merchantId?: string,
@@ -127,9 +128,9 @@ export class StaffController {
     description: 'Staff settings data',
     type: SettingsResponseDto,
   })
-  @ApiResponse({ status: 400, description: 'Multiple profiles found — merchantId required' })
-  @ApiResponse({ status: 403, description: 'Access denied: Staff role required' })
-  @ApiResponse({ status: 404, description: 'Staff profile not found' })
+  @ApiResponse({ status: 400, description: 'Multiple profiles found — merchantId required', type: ErrorResponseDto })
+  @ApiResponse({ status: 403, description: 'Access denied: Staff role required', type: ErrorResponseDto })
+  @ApiResponse({ status: 404, description: 'Staff profile not found', type: ErrorResponseDto })
   async getSettings(
     @CurrentUser() user: { sub: string; role: Role },
     @Query('merchantId') merchantId?: string,
@@ -155,9 +156,9 @@ export class StaffController {
     description: 'Settings updated successfully',
     type: SettingsResponseDto,
   })
-  @ApiResponse({ status: 400, description: 'Multiple profiles found — merchantId required' })
-  @ApiResponse({ status: 403, description: 'Access denied: Staff role required' })
-  @ApiResponse({ status: 404, description: 'Staff profile not found' })
+  @ApiResponse({ status: 400, description: 'Multiple profiles found — merchantId required', type: ErrorResponseDto })
+  @ApiResponse({ status: 403, description: 'Access denied: Staff role required', type: ErrorResponseDto })
+  @ApiResponse({ status: 404, description: 'Staff profile not found', type: ErrorResponseDto })
   async updateSettings(
     @CurrentUser() user: { sub: string; role: Role },
     @Body() dto: UpdateSettingsDto,
@@ -189,9 +190,9 @@ export class StaffController {
     description: 'Payout method saved successfully',
     type: MessageResponseDto,
   })
-  @ApiResponse({ status: 400, description: 'Invalid account number or multiple profiles — merchantId required' })
-  @ApiResponse({ status: 403, description: 'Access denied: Staff role required' })
-  @ApiResponse({ status: 404, description: 'Staff profile not found' })
+  @ApiResponse({ status: 400, description: 'Invalid account number or multiple profiles — merchantId required', type: ErrorResponseDto })
+  @ApiResponse({ status: 403, description: 'Access denied: Staff role required', type: ErrorResponseDto })
+  @ApiResponse({ status: 404, description: 'Staff profile not found', type: ErrorResponseDto })
   async savePayoutMethod(
     @CurrentUser() user: { sub: string; role: Role },
     @Body() dto: PayoutMethodDto,
