@@ -11,7 +11,7 @@
 #   1. Starts the NestJS app in background, captures logs
 #   2. Auto-detects OTP codes from dev logs
 #   3. Runs through all 22+ API calls in flow order
-#   4. Simulates a Paystack webhook (HMAC-SHA256 signed)
+#   4. Simulates a Paystack webhook (HMAC-SHA512 signed — per Paystack official spec)
 #   5. Verifies wallet balances, tips, payouts end-to-end
 #   6. Prints a beautiful summary at the end
 # =============================================================================
@@ -553,15 +553,15 @@ step_04_guest_tip() {
   fi
 
   # D2. Simulate Paystack Webhook (charge.success)
-  # Generate HMAC-SHA256 signature
+  # Generate HMAC-SHA512 signature (per Paystack official spec)
   PAYSTACK_WEBHOOK_SECRET=$(grep PAYSTACK_WEBHOOK_SECRET .env 2>/dev/null | cut -d= -f2- | tr -d "\"'" | xargs || echo "")
   if [ -n "$PAYSTACK_WEBHOOK_SECRET" ]; then
-    log "Simulating Paystack webhook with HMAC-SHA256 signature…"
+    log "Simulating Paystack webhook with HMAC-SHA512 signature…"
 
     WEBHOOK_PAYLOAD="{\"event\":\"charge.success\",\"data\":{\"reference\":\"${PAYMENT_REFERENCE}\",\"status\":\"success\",\"amount\":50000,\"currency\":\"NGN\"}}"
 
-    # Generate HMAC-SHA256 signature (raw bytes → hex)
-    WEBHOOK_SIGNATURE=$(echo -n "$WEBHOOK_PAYLOAD" | openssl dgst -sha256 -hmac "$PAYSTACK_WEBHOOK_SECRET" | sed 's/^.* //')
+    # Generate HMAC-SHA512 signature (raw bytes → hex)
+    WEBHOOK_SIGNATURE=$(echo -n "$WEBHOOK_PAYLOAD" | openssl dgst -sha512 -hmac "$PAYSTACK_WEBHOOK_SECRET" | sed 's/^.* //')
 
     # Send webhook with signature header
     RESPONSE=$(curl -sS -X POST "${BASE_URL}/payments/webhook" \

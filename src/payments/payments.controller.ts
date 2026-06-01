@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Logger,
+  Inject,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -26,7 +27,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Public } from '../auth/decorators/public.decorator';
 import { ErrorResponseDto } from '../auth/dto/response.dto';
-import { PaystackService } from './paystack.service';
+import {
+  PaymentProvider,
+  InitializeTransactionParams,
+} from './providers/interfaces/payment-provider.interface';
+import { PAYMENT_PROVIDER } from './providers/providers.constants';
 import { QrCode } from '../qrcodes/entities/qrcode.entity';
 import { Tip } from '../tips/entities/tip.entity';
 import { TipSource } from '../tips/enums/tip-source.enum';
@@ -73,7 +78,8 @@ export class PaymentsController {
   private readonly logger = new Logger(PaymentsController.name);
 
   constructor(
-    private readonly paystackService: PaystackService,
+    @Inject(PAYMENT_PROVIDER)
+    private readonly paymentProvider: PaymentProvider,
     @InjectRepository(QrCode)
     private readonly qrCodeRepository: Repository<QrCode>,
     @InjectRepository(Tip)
@@ -88,8 +94,8 @@ export class PaymentsController {
    * Guest tip flow:
    * 1. Guest scans a QR code
    * 2. This endpoint resolves the QR code, creates a PENDING Tip and Payment,
-   *    and initializes a Paystack checkout
-   * 3. Returns the Paystack authorization URL to the frontend
+   *    and initializes a checkout with the configured payment provider
+   * 3. Returns the authorization URL to the frontend
    */
   @Post('guest/tip')
   @Public()
@@ -97,11 +103,13 @@ export class PaymentsController {
   @ApiOperation({
     summary: 'Initiate a guest tip checkout',
     description:
-      'Resolves a QR code, creates a PENDING tip and payment record, and returns a Paystack checkout URL. Redirect the guest to the authorizationUrl to complete payment.',
+      'Resolves a QR code, creates a PENDING tip and payment record, and returns a ' +
+      'checkout URL from the configured payment provider. ' +
+      'Redirect the guest to the authorizationUrl to complete payment.',
   })
   @ApiResponse({
     status: 200,
-    description: 'Guest tip initiated — Paystack checkout URL returned',
+    description: 'Guest tip initiated — checkout URL returned',
     schema: {
       type: 'object',
       properties: {
@@ -161,9 +169,9 @@ export class PaymentsController {
     const savedTip = await this.tipRepository.save(tip);
     this.logger.log(`Tip ${savedTip.id} created (PENDING, ref qrCode: ${dto.qrCodeId})`);
 
-    // 3. Initialize Paystack transaction
+    // 3. Initialize transaction with the configured payment provider
     const email = dto.email || 'guest@taktip.com';
-    const result = await this.paystackService.initializeTransaction({
+    const result = await this.paymentProvider.initializeTransaction({
       email,
       amount: dto.amount,
       metadata: {
@@ -172,7 +180,7 @@ export class PaymentsController {
         staffProfileId,
         qrCodeId: dto.qrCodeId,
       },
-    });
+    } as InitializeTransactionParams);
 
     // 4. Link the Payment to the Tip
     await this.paymentRepository.update(
@@ -181,7 +189,8 @@ export class PaymentsController {
     );
 
     this.logger.log(
-      `Guest tip initiated: tip=${savedTip.id}, payment=${result.reference}`,
+      `Guest tip initiated via ${this.paymentProvider.name}: ` +
+        `tip=${savedTip.id}, payment=${result.reference}`,
     );
 
     return {
@@ -196,15 +205,16 @@ export class PaymentsController {
   /**
    * POST /payments/webhook
    *
-   * Paystack webhook receiver. No auth guards — Paystack sends these directly.
-   * Verifies the HMAC-SHA256 signature before processing the event.
+   * Payment provider webhook receiver. No auth guards — the provider sends
+   * these directly. Verifies the HMAC signature before processing the event.
    */
   @Post('payments/webhook')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Paystack webhook receiver',
+    summary: 'Payment provider webhook receiver',
     description:
-      'Receives payment event notifications from Paystack. Signature is verified via HMAC-SHA256 before processing. Requires a valid x-paystack-signature header.',
+      'Receives payment event notifications from the configured payment provider. ' +
+      'Signature is verified via HMAC before processing.',
   })
   @ApiResponse({
     status: 200,
@@ -242,9 +252,11 @@ export class PaymentsController {
   ): Promise<{ status: string }> {
     const rawBody = JSON.stringify(body);
 
-    // Verify HMAC-SHA256 signature
-    if (!signature || !this.paystackService.verifyWebhookSignature(signature, rawBody)) {
-      this.logger.warn('Webhook signature verification failed');
+    // Verify HMAC signature
+    if (!signature || !this.paymentProvider.verifyWebhookSignature(signature, rawBody)) {
+      this.logger.warn(
+        `[${this.paymentProvider.name}] Webhook signature verification failed`,
+      );
       return { status: 'signature verification failed' };
     }
 
@@ -252,14 +264,16 @@ export class PaymentsController {
     const data = body.data;
 
     if (!event || !data) {
-      this.logger.warn('Webhook missing event or data');
+      this.logger.warn(`[${this.paymentProvider.name}] Webhook missing event or data`);
       return { status: 'invalid payload' };
     }
 
-    this.logger.log(`Webhook received: ${event}`);
+    this.logger.log(
+      `[${this.paymentProvider.name}] Webhook received: ${event}`,
+    );
 
-    // Process the event
-    await this.paystackService.handleWebhook(event, data as Record<string, unknown>);
+    // Process the event through the configured provider
+    await this.paymentProvider.handleWebhook(event, data as Record<string, unknown>);
 
     return { status: 'success' };
   }
