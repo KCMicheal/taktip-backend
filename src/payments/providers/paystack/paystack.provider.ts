@@ -237,6 +237,14 @@ export class PaystackProvider implements PaymentProvider {
       return;
     }
 
+    // Idempotency guard — skip if already processed (Paystack may retry webhooks)
+    if (payment.paymentStatus === PaymentStatus.SUCCESS) {
+      this.logger.log(
+        `Payment ${payment.id} (ref: ${reference}) already SUCCESS — skipping duplicate`,
+      );
+      return;
+    }
+
     // Update payment to SUCCESS with enriched provider data
     payment.paymentStatus = PaymentStatus.SUCCESS;
     payment.providerResponse = data;
@@ -298,6 +306,14 @@ export class PaystackProvider implements PaymentProvider {
     const payment = await this.paymentRepository.findOne({ where: { reference } });
     if (!payment) {
       this.logger.warn(`Payment not found for reference: ${reference}`);
+      return;
+    }
+
+    // Idempotency guard — skip if already in a terminal state (success or failed)
+    if (payment.paymentStatus === PaymentStatus.SUCCESS || payment.paymentStatus === PaymentStatus.FAILED) {
+      this.logger.log(
+        `Payment ${payment.id} (ref: ${reference}) already in terminal state — skipping duplicate`,
+      );
       return;
     }
 

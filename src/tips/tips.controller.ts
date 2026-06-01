@@ -7,6 +7,7 @@ import {
   ParseUUIDPipe,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -95,6 +96,16 @@ export class TipsController {
     merchantId?: string,
   ): Promise<string> {
     if (merchantId) {
+      // Verify the merchant belongs to the authenticated user
+      const merchant = await this.merchantRepository.findOne({
+        where: { id: merchantId },
+      });
+      if (!merchant) {
+        throw new NotFoundException('Merchant not found');
+      }
+      if (merchant.ownerId !== userId) {
+        throw new ForbiddenException('Not authorized to access this merchant');
+      }
       return merchantId;
     }
 
@@ -296,12 +307,24 @@ export class TipsController {
   })
   @ApiResponse({ status: 403, description: 'Access denied: Merchant role required', type: ErrorResponseDto })
   async getStaffTipsByMerchant(
+    @CurrentUser() user: { sub: string },
     @Param('staffId', ParseUUIDPipe) staffId: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
     const pageNum = page ? parseInt(page, 10) : 1;
     const limitNum = limit ? parseInt(limit, 10) : 20;
+
+    // Resolve the merchant for this user
+    const merchantId = await this.resolveMerchantId(user.sub);
+
+    // Verify the staff profile belongs to this merchant
+    const staffProfile = await this.staffProfileRepository.findOne({
+      where: { id: staffId, merchantId },
+    });
+    if (!staffProfile) {
+      throw new NotFoundException('Staff profile not found for this merchant');
+    }
 
     const data = await this.tipsService.findByStaff(
       staffId,

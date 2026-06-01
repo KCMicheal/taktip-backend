@@ -13,9 +13,9 @@ export class CreateQrCodesTable1730000000001 implements MigrationInterface {
     await queryRunner.query(`
       CREATE TABLE "qr_codes" (
         "id" uuid NOT NULL DEFAULT gen_random_uuid(),
-        "status" "public"."entity_status" NOT NULL DEFAULT 'ACTIVE',
-        "created_at" TIMESTAMP NOT NULL DEFAULT now(),
-        "updated_at" TIMESTAMP NOT NULL DEFAULT now(),
+        "status" integer NOT NULL DEFAULT 1,
+        "createdAt" TIMESTAMP NOT NULL DEFAULT now(),
+        "updatedAt" TIMESTAMP NOT NULL DEFAULT now(),
         "merchant_id" uuid NOT NULL,
         "staff_profile_id" uuid,
         "short_code" character varying NOT NULL,

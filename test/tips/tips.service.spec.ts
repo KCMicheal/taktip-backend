@@ -343,7 +343,9 @@ describe('TipsService', () => {
       const callArg: any = mockTipRepository.find.mock.calls[0][0];
       // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       const betweenValue = callArg.where.createdAt._value;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       expect(betweenValue[0]).toEqual(startDate);
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       expect(betweenValue[1]).toBeInstanceOf(Date);
     });
 
@@ -358,7 +360,9 @@ describe('TipsService', () => {
       const callArg2: any = mockTipRepository.find.mock.calls[0][0];
       // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       const betweenValue2 = callArg2.where.createdAt._value;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       expect(betweenValue2[0]).toEqual(new Date('1970-01-01'));
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       expect(betweenValue2[1]).toEqual(endDate);
     });
   });

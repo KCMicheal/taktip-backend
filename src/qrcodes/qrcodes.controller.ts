@@ -91,6 +91,17 @@ export class QrCodesController {
     @Body() dto: GenerateQrCodeDto,
   ) {
     const merchantId = await this.resolveMerchantId(user.sub);
+
+    // If a staff profile is specified, verify it belongs to this merchant
+    if (dto.staffProfileId) {
+      const staffProfile = await this.staffProfileRepository.findOne({
+        where: { id: dto.staffProfileId, merchantId },
+      });
+      if (!staffProfile) {
+        throw new NotFoundException('Staff profile not found for this merchant');
+      }
+    }
+
     const result = await this.qrCodesService.generateQrCode(merchantId, dto);
     return { status: 'success', data: result };
   }
