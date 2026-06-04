@@ -58,11 +58,13 @@ export type TransactionsListDto = PaginatedResult<Transaction>;
  * A single wallet entry in the staff consolidated view
  */
 export interface StaffWalletEntryDto {
+  id: string | null;
   merchantName: string;
   merchantShortCode: string;
   balanceAvailable: number;
   balancePending: number;
   balanceProcessing: number;
+  reference: string | null;
 }
 
 /**
@@ -627,11 +629,13 @@ export class WalletService {
         where: { ownerId: profile.id, ownerType: 'staff' },
       });
       return {
+        id: wallet?.id || null,
         merchantName: profile.merchant?.name || 'Unknown',
         merchantShortCode: profile.merchant?.shortCode || '',
         balanceAvailable: wallet ? Number(wallet.balanceAvailable) : 0,
         balancePending: wallet ? Number(wallet.balancePending) : 0,
         balanceProcessing: wallet ? Number(wallet.balanceProcessing) : 0,
+        reference: wallet?.reference || null,
       };
     });
 

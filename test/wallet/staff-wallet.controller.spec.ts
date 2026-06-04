@@ -41,18 +41,22 @@ describe('StaffWalletController', () => {
   const mockConsolidatedView = {
     wallets: [
       {
+        id: 'wallet-1-uuid',
         merchantName: "Joe's Diner",
         merchantShortCode: 'JOE123',
         balanceAvailable: 450.0,
         balancePending: 50.0,
         balanceProcessing: 0.0,
+        reference: 'WAL-ABC123',
       },
       {
+        id: 'wallet-2-uuid',
         merchantName: "Mario's Pizza",
         merchantShortCode: 'MAR456',
         balanceAvailable: 120.0,
         balancePending: 30.0,
         balanceProcessing: 0.0,
+        reference: 'WAL-DEF456',
       },
     ],
     totalBalances: {

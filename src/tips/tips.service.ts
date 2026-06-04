@@ -114,6 +114,7 @@ export class TipsService {
       rating: tip.rating ?? undefined,
       createdAt: tip.createdAt,
       staffName: staffNameMap.get(tip.staffProfileId) || 'Unknown Staff',
+      qrCodeId: tip.qrCodeId || undefined,
     }));
 
     return { tips: tipDtos, total };

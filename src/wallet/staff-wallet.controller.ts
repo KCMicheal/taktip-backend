@@ -57,11 +57,13 @@ export class StaffWalletController {
               items: {
                 type: 'object',
                 properties: {
+                  id: { type: 'string', format: 'uuid', example: 'wallet-uuid', nullable: true, description: 'Wallet UUID' },
                   merchantName: { type: 'string', example: "Joe's Restaurant" },
                   merchantShortCode: { type: 'string', example: 'CODE123456-GR' },
                   balanceAvailable: { type: 'number', example: 5000 },
                   balancePending: { type: 'number', example: 2000 },
                   balanceProcessing: { type: 'number', example: 0 },
+                  reference: { type: 'string', example: 'WAL-ABC123', nullable: true, description: 'Human-readable wallet reference' },
                 },
               },
             },
