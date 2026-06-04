@@ -186,6 +186,7 @@ describe('WalletService', () => {
         balancePending: 0,
         balanceProcessing: 0,
         currency: 'NGN',
+        reference: expect.stringMatching(/^WAL-/),
       });
       expect(mockWalletRepository.save).toHaveBeenCalled();
     });
@@ -234,6 +235,7 @@ describe('WalletService', () => {
         balancePending: 0,
         balanceProcessing: 0,
         currency: 'NGN',
+        reference: expect.stringMatching(/^WAL-/),
       });
     });
   });

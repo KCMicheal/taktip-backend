@@ -238,6 +238,7 @@ export class QrCodesController {
         data: {
           type: 'object',
           properties: {
+            qrCodeId: { type: 'string', format: 'uuid', example: '550e8400-e29b-41d4-a716-446655440000', description: 'The QR code UUID needed for guest tip checkout' },
             merchantId: { type: 'string', format: 'uuid', example: '550e8400-e29b-41d4-a716-446655440000' },
             staffProfileId: { type: 'string', format: 'uuid', nullable: true, example: '660e8400-e29b-41d4-a716-446655440001' },
           },
@@ -254,6 +255,7 @@ export class QrCodesController {
     }
 
     const data: Record<string, unknown> = {
+      qrCodeId: qrCode.id,
       merchantId: qrCode.merchantId,
     };
 

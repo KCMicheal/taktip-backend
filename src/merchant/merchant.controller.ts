@@ -1,13 +1,18 @@
-import { Controller, Get, Put, Post, Param, Body, Query, UseGuards, ParseUUIDPipe, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Put, Post, Param, Body, Query, UseGuards, ParseUUIDPipe, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ErrorResponseDto } from '../auth/dto/response.dto';
+import { Role } from '../auth/enums/role.enum';
 import { MerchantService } from './merchant.service';
 import { InviteService } from './services/invite.service';
 import { InviteStaffDto } from './dto/invite.dto';
 import { UpdateMerchantDto } from './dto/update-merchant.dto';
 import { SearchablePaginationParamsDto, InvitePaginationParamsDto } from '../common/pagination';
+import { TipsService } from '../tips/tips.service';
+import { TipResponseDto } from '../tips/dto/tip-response.dto';
 
 @ApiTags('merchant')
 @ApiBearerAuth()
@@ -17,7 +22,55 @@ export class MerchantController {
   constructor(
     private readonly merchantService: MerchantService,
     private readonly inviteService: InviteService,
+    private readonly tipsService: TipsService,
   ) {}
+
+  @Get('tips')
+  @UseGuards(RolesGuard)
+  @Roles(Role.MERCHANT)
+  @ApiOperation({ summary: 'Get all tips for the authenticated merchant (paginated, with staff names)' })
+  @ApiQuery({ name: 'page', required: false, example: 1, description: 'Page number' })
+  @ApiQuery({ name: 'limit', required: false, example: 20, description: 'Items per page' })
+  @ApiQuery({ name: 'merchantId', required: false, description: 'Merchant UUID (resolved from user if omitted)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated tips list with staff names',
+    type: TipResponseDto,
+    isArray: true,
+  })
+  @ApiResponse({ status: 403, description: 'Access denied: Merchant role required', type: ErrorResponseDto })
+  async getMerchantTips(
+    @CurrentUser() user: { sub: string },
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('merchantId') merchantId?: string,
+  ) {
+    const pageNum = page ? parseInt(page, 10) : 1;
+    const limitNum = limit ? parseInt(limit, 10) : 20;
+
+    // Resolve the merchant ID: either the provided one or the user's first merchant
+    let resolvedMerchantId: string;
+    if (merchantId) {
+      const merchant = await this.merchantService.getMerchantById(merchantId);
+      if (merchant.ownerId !== user.sub) {
+        throw new ForbiddenException('Not authorized to access this merchant');
+      }
+      resolvedMerchantId = merchantId;
+    } else {
+      const merchants = await this.merchantService.getMerchantsByOwnerId(user.sub);
+      if (!merchants.length) {
+        throw new NotFoundException('No merchant found for this user');
+      }
+      resolvedMerchantId = merchants[0].id;
+    }
+
+    const data = await this.tipsService.findByMerchant(
+      resolvedMerchantId,
+      pageNum,
+      limitNum,
+    );
+    return { status: 'success', data };
+  }
 
   @Get('me')
   @ApiOperation({ summary: 'Get current user merchants' })

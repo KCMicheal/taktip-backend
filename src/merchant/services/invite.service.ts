@@ -269,7 +269,7 @@ export class InviteService {
 
       // Auto-create a wallet for the new staff profile (Phase 3)
       // Idempotent — createStaffWallet skips if wallet already exists
-      await this.walletService.createStaffWallet(savedProfile.id, 'NGN');
+      await this.walletService.createStaffWallet(savedProfile.id, merchant.currency);
       this.logger.log(`Staff profile created for user ${user.id} at merchant ${merchant.id}`);
     } else {
       this.logger.log(`Staff profile already exists for user ${user.id} at merchant ${merchant.id}, skipping creation`);
