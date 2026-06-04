@@ -375,10 +375,11 @@ export class WalletService {
       balancePending: 0,
       balanceProcessing: 0,
       currency: 'NGN',
+      reference: await this.generateWalletReference(),
     } as Partial<Wallet>);
 
     const saved = await this.walletRepository.save(wallet);
-    this.logger.log(`Platform fee wallet created (id: ${saved.id})`);
+    this.logger.log(`Platform fee wallet created (id: ${saved.id}, ref: ${saved.reference})`);
     return saved;
   }
 
