@@ -15,6 +15,7 @@ import { PayoutsModule } from './payouts/payouts.module';
 import { PaymentsModule } from './payments/payments.module';
 import { QrCodesModule } from './qrcodes/qrcodes.module';
 import { TipsModule } from './tips/tips.module';
+import { BankModule } from './bank/bank.module';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 
@@ -70,6 +71,7 @@ import { GlobalExceptionFilter } from './common/filters/global-exception.filter'
         },
       ],
     }),
+    BankModule,
     WalletModule,
     AuthModule,
     HealthModule,

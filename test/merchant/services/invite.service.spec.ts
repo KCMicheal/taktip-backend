@@ -241,7 +241,7 @@ describe('InviteService', () => {
       mockUserRepository.create.mockReturnValue(newUser);
       mockUserRepository.save.mockResolvedValue(newUser);
       mockInviteRepository.save.mockResolvedValue({ ...mockInvite, status: InviteStatus.ACCEPTED });
-      mockMerchantRepository.findOne.mockResolvedValue({ id: 'merchant-uuid' });
+      mockMerchantRepository.findOne.mockResolvedValue({ id: 'merchant-uuid', currency: 'NGN' });
 
       // StaffProfile: no existing profile for this merchant, create new one
       mockStaffProfileRepository.findOne.mockResolvedValue(null);
@@ -297,7 +297,7 @@ describe('InviteService', () => {
       mockInviteRepository.findOne.mockResolvedValue(mockInvite);
       mockUserRepository.findOne.mockResolvedValue(existingUser);
       mockInviteRepository.save.mockResolvedValue({ ...mockInvite, status: InviteStatus.ACCEPTED });
-      mockMerchantRepository.findOne.mockResolvedValue({ id: 'merchant-b-uuid' });
+      mockMerchantRepository.findOne.mockResolvedValue({ id: 'merchant-b-uuid', currency: 'NGN' });
 
       // User already has a profile for Merchant A, but NOT for Merchant B → create new
       mockStaffProfileRepository.findOne.mockResolvedValue(null);
@@ -349,7 +349,7 @@ describe('InviteService', () => {
       mockInviteRepository.findOne.mockResolvedValue(mockInvite);
       mockUserRepository.findOne.mockResolvedValue(existingUser);
       mockInviteRepository.save.mockResolvedValue({ ...mockInvite, status: InviteStatus.ACCEPTED });
-      mockMerchantRepository.findOne.mockResolvedValue({ id: 'merchant-uuid' });
+      mockMerchantRepository.findOne.mockResolvedValue({ id: 'merchant-uuid', currency: 'NGN' });
 
       // StaffProfile: no existing profile for this merchant, create new one
       mockStaffProfileRepository.findOne.mockResolvedValue(null);

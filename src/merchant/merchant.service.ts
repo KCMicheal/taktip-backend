@@ -157,7 +157,9 @@ export class MerchantService {
   }
 
   /**
-   * Update merchant details
+   * Update merchant details.
+   * If the currency changes, cascade the update to all wallets under this merchant
+   * (merchant wallet + all staff wallets).
    */
   async updateMerchant(
     id: string,
@@ -178,6 +180,7 @@ export class MerchantService {
     },
   ): Promise<Merchant> {
     const merchant = await this.getMerchantById(id);
+    const currencyChanged = updates.currency !== undefined && updates.currency !== merchant.currency;
 
     // Apply updates
     if (updates.name !== undefined) merchant.name = updates.name;
@@ -194,7 +197,33 @@ export class MerchantService {
     if (updates.currency !== undefined) merchant.currency = updates.currency;
     if (updates.timezone !== undefined) merchant.timezone = updates.timezone;
 
-    return this.merchantRepository.save(merchant);
+    // Save merchant within a transaction so wallet cascade is atomic
+    await this.merchantRepository.manager.transaction(async (entityManager) => {
+      await entityManager.save(merchant);
+
+      // If currency changed, cascade to all wallets under this merchant
+      if (currencyChanged && updates.currency) {
+        // Update the merchant's own wallet
+        await entityManager.query(
+          'UPDATE "wallets" SET "currency" = $1 WHERE "owner_id" = $2 AND "owner_type" = $3',
+          [updates.currency, id, 'merchant'],
+        );
+
+        // Update all staff wallets for this merchant's staff profiles
+        await entityManager.query(
+          'UPDATE "wallets" SET "currency" = $1 WHERE "owner_id" IN ' +
+          '(SELECT "id" FROM "staff_profiles" WHERE "merchant_id" = $2) ' +
+          'AND "owner_type" = $3',
+          [updates.currency, id, 'staff'],
+        );
+
+        this.logger.log(
+          `Currency cascade: updated wallets for merchant ${id} to ${updates.currency}`,
+        );
+      }
+    });
+
+    return merchant;
   }
 
   /**
