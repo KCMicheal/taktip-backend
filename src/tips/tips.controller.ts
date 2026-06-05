@@ -232,41 +232,6 @@ export class TipsController {
 
   // ───────── MERCHANT ENDPOINTS ─────────
 
-  @Get('merchant/tips')
-  @Roles(Role.MERCHANT)
-  @ApiOperation({ summary: 'Get all tips for the authenticated merchant (paginated, with staff names)' })
-  @ApiQuery({ name: 'page', required: false, example: 1, description: 'Page number' })
-  @ApiQuery({ name: 'limit', required: false, example: 20, description: 'Items per page' })
-  @ApiQuery({ name: 'merchantId', required: false, description: 'Merchant UUID (resolved from user if omitted)' })
-  @ApiResponse({
-    status: 200,
-    description: 'Paginated tips list with staff names',
-    type: TipResponseDto,
-    isArray: true,
-  })
-  @ApiResponse({ status: 403, description: 'Access denied: Merchant role required', type: ErrorResponseDto })
-  async getMerchantTips(
-    @CurrentUser() user: { sub: string },
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-    @Query('merchantId') merchantId?: string,
-  ) {
-    const pageNum = page ? parseInt(page, 10) : 1;
-    const limitNum = limit ? parseInt(limit, 10) : 20;
-
-    const resolvedMerchantId = await this.resolveMerchantId(
-      user.sub,
-      merchantId,
-    );
-
-    const data = await this.tipsService.findByMerchant(
-      resolvedMerchantId,
-      pageNum,
-      limitNum,
-    );
-    return { status: 'success', data };
-  }
-
   @Get('merchant/staff/:staffId/tips')
   @Roles(Role.MERCHANT)
   @ApiOperation({ summary: 'View tips for a specific staff member' })

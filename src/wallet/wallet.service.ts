@@ -58,11 +58,13 @@ export type TransactionsListDto = PaginatedResult<Transaction>;
  * A single wallet entry in the staff consolidated view
  */
 export interface StaffWalletEntryDto {
+  id: string | null;
   merchantName: string;
   merchantShortCode: string;
   balanceAvailable: number;
   balancePending: number;
   balanceProcessing: number;
+  reference: string | null;
 }
 
 /**
@@ -174,6 +176,34 @@ export class WalletService {
   }
 
   /**
+   * Generate a unique wallet reference in the format WAL-XXXXXX
+   * (6 random alphanumeric characters). Checks the database for
+   * collisions before returning. Retries up to 10 times.
+   */
+  private async generateWalletReference(): Promise<string> {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    const maxAttempts = 10;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      let randomPart = '';
+      for (let i = 0; i < 6; i++) {
+        randomPart += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      const reference = `WAL-${randomPart}`;
+
+      const existing = await this.walletRepository.findOne({
+        where: { reference },
+      });
+
+      if (!existing) {
+        return reference;
+      }
+    }
+
+    throw new ConflictException('Unable to generate unique wallet reference');
+  }
+
+  /**
    * POST /wallets
    * Create a wallet for a polymorphic owner
    */
@@ -225,6 +255,7 @@ export class WalletService {
       balancePending: 0,
       balanceProcessing: 0,
       currency: dto.currency || 'NGN',
+      reference: await this.generateWalletReference(),
     } as Partial<Wallet>);
 
     return this.walletRepository.save(wallet);
@@ -253,10 +284,11 @@ export class WalletService {
       balancePending: 0,
       balanceProcessing: 0,
       currency: currency || 'NGN',
+      reference: await this.generateWalletReference(),
     } as Partial<Wallet>);
 
     const saved = await this.walletRepository.save(wallet);
-    this.logger.log(`Staff wallet created for profile ${staffProfileId} (id: ${saved.id})`);
+    this.logger.log(`Staff wallet created for profile ${staffProfileId} (id: ${saved.id}, ref: ${saved.reference})`);
     return saved;
   }
 
@@ -282,10 +314,11 @@ export class WalletService {
       balancePending: 0,
       balanceProcessing: 0,
       currency: currency || 'NGN',
+      reference: await this.generateWalletReference(),
     } as Partial<Wallet>);
 
     const saved = await this.walletRepository.save(wallet);
-    this.logger.log(`Customer wallet created for profile ${customerProfileId} (id: ${saved.id})`);
+    this.logger.log(`Customer wallet created for profile ${customerProfileId} (id: ${saved.id}, ref: ${saved.reference})`);
     return saved;
   }
 
@@ -344,10 +377,11 @@ export class WalletService {
       balancePending: 0,
       balanceProcessing: 0,
       currency: 'NGN',
+      reference: await this.generateWalletReference(),
     } as Partial<Wallet>);
 
     const saved = await this.walletRepository.save(wallet);
-    this.logger.log(`Platform fee wallet created (id: ${saved.id})`);
+    this.logger.log(`Platform fee wallet created (id: ${saved.id}, ref: ${saved.reference})`);
     return saved;
   }
 
@@ -567,10 +601,11 @@ export class WalletService {
       balancePending: 0,
       balanceProcessing: 0,
       currency: merchant.currency || 'NGN',
+      reference: await this.generateWalletReference(),
     } as Partial<Wallet>);
 
     const saved = await this.walletRepository.save(wallet);
-    this.logger.log(`Merchant wallet auto-created for merchant ${merchant.id} (id: ${saved.id})`);
+    this.logger.log(`Merchant wallet auto-created for merchant ${merchant.id} (id: ${saved.id}, ref: ${saved.reference})`);
     return saved;
   }
 
@@ -594,11 +629,13 @@ export class WalletService {
         where: { ownerId: profile.id, ownerType: 'staff' },
       });
       return {
+        id: wallet?.id || null,
         merchantName: profile.merchant?.name || 'Unknown',
         merchantShortCode: profile.merchant?.shortCode || '',
         balanceAvailable: wallet ? Number(wallet.balanceAvailable) : 0,
         balancePending: wallet ? Number(wallet.balancePending) : 0,
         balanceProcessing: wallet ? Number(wallet.balanceProcessing) : 0,
+        reference: wallet?.reference || null,
       };
     });
 

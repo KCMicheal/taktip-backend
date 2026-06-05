@@ -52,6 +52,14 @@ export class Wallet extends BaseEntity {
   @Column({ type: 'varchar', default: 'NGN' })
   currency: string;
 
+  /**
+   * Human-readable wallet reference (WAL-XXXXXX).
+   * Generated at wallet creation with collision checking.
+   * Unique — guaranteed via DB constraint + application-level retry.
+   */
+  @Column({ type: 'varchar', unique: true, nullable: true, name: 'reference' })
+  reference: string | null;
+
   @Column({ type: 'timestamp', nullable: true, name: 'locked_until' })
   lockedUntil: Date | null;
 
