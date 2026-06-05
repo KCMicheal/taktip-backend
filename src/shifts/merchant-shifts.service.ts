@@ -6,7 +6,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Merchant } from '../merchant/entities/merchant.entity';
 import { StaffProfile } from '../staff/entities/staff-profile.entity';
 import { Shift } from './entities/shift.entity';
@@ -97,6 +97,26 @@ export class MerchantShiftsService {
     }
 
     return merchant;
+  }
+
+  /**
+   * Verify all staff profile IDs belong to the given merchant.
+   * Throws BadRequestException if any staff profile does not belong to this merchant.
+   */
+  private async validateStaffProfilesBelongToMerchant(
+    staffProfileIds: string[],
+    merchantId: string,
+  ): Promise<void> {
+    const existing = await this.staffProfileRepository.find({
+      where: { id: In(staffProfileIds), merchantId },
+      select: ['id'],
+    });
+
+    if (existing.length !== staffProfileIds.length) {
+      throw new BadRequestException(
+        'One or more staff profiles do not belong to this merchant',
+      );
+    }
   }
 
   /**
@@ -222,6 +242,8 @@ export class MerchantShiftsService {
 
     // Assign staff if provided
     if (dto.staffProfileIds && dto.staffProfileIds.length > 0) {
+      await this.validateStaffProfilesBelongToMerchant(dto.staffProfileIds, merchantId);
+
       const assignments = dto.staffProfileIds.map((staffProfileId) =>
         this.shiftStaffRepository.create({
           shiftId: savedShift.id,
@@ -280,6 +302,8 @@ export class MerchantShiftsService {
 
     // Add staff assignments
     if (dto.addStaffProfileIds && dto.addStaffProfileIds.length > 0) {
+      await this.validateStaffProfilesBelongToMerchant(dto.addStaffProfileIds, merchantId);
+
       const newAssignments = dto.addStaffProfileIds.map((staffProfileId) =>
         this.shiftStaffRepository.create({
           shiftId: shift.id,
@@ -294,9 +318,7 @@ export class MerchantShiftsService {
     if (dto.removeStaffProfileIds && dto.removeStaffProfileIds.length > 0) {
       await this.shiftStaffRepository.delete({
         shiftId: shift.id,
-        staffProfileId: dto.removeStaffProfileIds.length === 1
-          ? dto.removeStaffProfileIds[0] as any
-          : dto.removeStaffProfileIds as any,
+        staffProfileId: In(dto.removeStaffProfileIds),
       });
     }
 

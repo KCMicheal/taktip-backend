@@ -56,7 +56,14 @@ export class TipsController {
     merchantId?: string,
   ): Promise<string> {
     if (staffProfileId) {
-      return staffProfileId;
+      // Verify this staff profile belongs to the authenticated user
+      const profile = await this.staffProfileRepository.findOne({
+        where: { id: staffProfileId, userId },
+      });
+      if (!profile) {
+        throw new NotFoundException('Staff profile not found');
+      }
+      return profile.id;
     }
 
     if (merchantId) {

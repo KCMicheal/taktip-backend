@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import {
   NotFoundException,
   ForbiddenException,
@@ -49,6 +49,7 @@ describe('MerchantShiftsService', () => {
 
   const mockStaffProfileRepository = {
     findOne: jest.fn(),
+    find: jest.fn(),
   };
 
   const mockPaginationService = {
@@ -359,6 +360,10 @@ describe('MerchantShiftsService', () => {
       };
 
       mockMerchantRepository.findOne.mockResolvedValue(merchant);
+      mockStaffProfileRepository.find.mockResolvedValue([
+        { id: 'profile-1' },
+        { id: 'profile-2' },
+      ]);
       mockShiftRepository.create.mockReturnValue(shift);
       mockShiftRepository.save.mockResolvedValue(shift);
       mockShiftStaffRepository.create
@@ -467,6 +472,7 @@ describe('MerchantShiftsService', () => {
       };
 
       mockMerchantRepository.findOne.mockResolvedValue(merchant);
+      mockStaffProfileRepository.find.mockResolvedValue([{ id: 'new-staff-profile' }]);
       mockShiftRepository.findOne.mockResolvedValue(shift);
       mockShiftStaffRepository.create.mockReturnValue(
         createMockAssignment({ staffProfileId: 'new-staff-profile' }),
@@ -498,7 +504,7 @@ describe('MerchantShiftsService', () => {
 
       expect(mockShiftStaffRepository.delete).toHaveBeenCalledWith({
         shiftId: 'shift-uuid',
-        staffProfileId: 'profile-to-remove',
+        staffProfileId: In(['profile-to-remove']),
       });
     });
 
