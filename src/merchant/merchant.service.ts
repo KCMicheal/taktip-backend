@@ -212,7 +212,7 @@ export class MerchantService {
         // Update all staff wallets for this merchant's staff profiles
         await entityManager.query(
           'UPDATE "wallets" SET "currency" = $1 WHERE "owner_id" IN ' +
-          '(SELECT "id" FROM "staff_profiles" WHERE "merchant_id" = $2) ' +
+          '(SELECT "id" FROM "staff_profiles" WHERE "merchantId" = $2) ' +
           'AND "owner_type" = $3',
           [updates.currency, id, 'staff'],
         );

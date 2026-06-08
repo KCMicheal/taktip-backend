@@ -18,6 +18,7 @@ import { Role } from '../../auth/enums/role.enum';
 import { StaffProfile } from '../../staff/entities/staff-profile.entity';
 import { MailService } from '../../auth/services/mail.service';
 import { WalletService } from '../../wallet/wallet.service';
+import { QrCodesService } from '../../qrcodes/qrcodes.service';
 import { InviteStaffDto, AcceptInviteDto } from '../dto/invite.dto';
 import {
   PaginationService,
@@ -42,6 +43,7 @@ export class InviteService {
     private readonly mailService: MailService,
     private readonly configService: ConfigService,
     private readonly walletService: WalletService,
+    private readonly qrCodesService: QrCodesService,
     private readonly paginationService: PaginationService,
   ) {}
 
@@ -270,6 +272,11 @@ export class InviteService {
       // Auto-create a wallet for the new staff profile (Phase 3)
       // Idempotent — createStaffWallet skips if wallet already exists
       await this.walletService.createStaffWallet(savedProfile.id, merchant.currency);
+
+      // Auto-generate a QR code for the new staff profile
+      // Idempotent — ensureStaffQrCode skips if QR code already exists
+      await this.qrCodesService.ensureStaffQrCode(savedProfile.id, merchant.id);
+
       this.logger.log(`Staff profile created for user ${user.id} at merchant ${merchant.id}`);
     } else {
       this.logger.log(`Staff profile already exists for user ${user.id} at merchant ${merchant.id}, skipping creation`);
