@@ -7,7 +7,9 @@ import {
   HttpStatus,
   Logger,
   Inject,
+  Req,
 } from '@nestjs/common';
+import { Request } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -249,8 +251,10 @@ export class PaymentsController {
   async handleWebhook(
     @Headers('x-paystack-signature') signature: string,
     @Body() body: Record<string, unknown>,
+    @Req() req: Request,
   ): Promise<{ status: string }> {
-    const rawBody = JSON.stringify(body);
+    // Use the raw request body for signature verification (byte-for-byte match with Paystack)
+    const rawBody = ((req as unknown as { rawBody?: Buffer }).rawBody)?.toString() || JSON.stringify(body);
 
     // Verify HMAC signature
     if (!signature || !this.paymentProvider.verifyWebhookSignature(signature, rawBody)) {
