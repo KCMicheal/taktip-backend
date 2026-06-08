@@ -214,6 +214,50 @@ describe('QrCodesService', () => {
     });
   });
 
+  // ───────── ensureStaffQrCode ─────────
+
+  describe('ensureStaffQrCode', () => {
+    it('should skip creation if QR code already exists for staff profile', async () => {
+      const existingQr = createMockQrCode({
+        staffProfileId: 'staff-uuid',
+        merchantId: 'merchant-uuid',
+      });
+      mockQrCodeRepository.findOne.mockResolvedValue(existingQr);
+
+      await service.ensureStaffQrCode('staff-uuid', 'merchant-uuid');
+
+      expect(mockQrCodeRepository.findOne).toHaveBeenCalledWith({
+        where: { staffProfileId: 'staff-uuid' },
+      });
+      expect(mockQrCodeRepository.create).not.toHaveBeenCalled();
+      expect(mockQrCodeRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('should create a QR code if none exists for the staff profile', async () => {
+      mockQrCodeRepository.findOne.mockResolvedValue(null);
+      mockQrCodeRepository.create.mockReturnValue(
+        createMockQrCode({ staffProfileId: 'staff-uuid', merchantId: 'merchant-uuid' }),
+      );
+      mockQrCodeRepository.save.mockResolvedValue(
+        createMockQrCode({ staffProfileId: 'staff-uuid', merchantId: 'merchant-uuid' }),
+      );
+
+      await service.ensureStaffQrCode('staff-uuid', 'merchant-uuid');
+
+      expect(mockQrCodeRepository.findOne).toHaveBeenCalledWith({
+        where: { staffProfileId: 'staff-uuid' },
+      });
+      expect(mockQrCodeRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          merchantId: 'merchant-uuid',
+          staffProfileId: 'staff-uuid',
+          isActive: true,
+        }),
+      );
+      expect(mockQrCodeRepository.save).toHaveBeenCalledTimes(1);
+    });
+  });
+
   // ───────── deactivate ─────────
 
   describe('deactivate', () => {

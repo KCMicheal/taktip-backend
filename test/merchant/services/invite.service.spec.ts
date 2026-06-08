@@ -9,6 +9,7 @@ import { Merchant } from '../../../src/merchant/entities/merchant.entity';
 import { User } from '../../../src/auth/entities/user.entity';
 import { StaffProfile } from '../../../src/staff/entities/staff-profile.entity';
 import { WalletService } from '../../../src/wallet/wallet.service';
+import { QrCodesService } from '../../../src/qrcodes/qrcodes.service';
 import { Role } from '../../../src/auth/enums/role.enum';
 import { InviteStatus } from '../../../src/common/enums/invite-status.enum';
 import { InviteStaffDto, AcceptInviteDto } from '../../../src/merchant/dto/invite.dto';
@@ -56,6 +57,10 @@ describe('InviteService', () => {
     createStaffWallet: jest.fn().mockResolvedValue({ id: 'wallet-uuid' }),
   };
 
+  const mockQrCodesService = {
+    ensureStaffQrCode: jest.fn().mockResolvedValue(undefined),
+  };
+
   const mockPaginationService = {
     paginate: jest.fn(),
     wrap: jest.fn(),
@@ -93,6 +98,10 @@ describe('InviteService', () => {
         {
           provide: WalletService,
           useValue: mockWalletService,
+        },
+        {
+          provide: QrCodesService,
+          useValue: mockQrCodesService,
         },
         {
           provide: PaginationService,

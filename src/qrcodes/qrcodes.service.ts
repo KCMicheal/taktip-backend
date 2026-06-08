@@ -87,6 +87,37 @@ export class QrCodesService {
   }
 
   /**
+   * Ensure a QR code exists for a staff profile.
+   * Idempotent — skips if a QR code already exists for this staffProfileId.
+   * Called when a staff invite is accepted and their profile is created.
+   */
+  async ensureStaffQrCode(staffProfileId: string, merchantId: string): Promise<void> {
+    const existing = await this.qrCodeRepository.findOne({
+      where: { staffProfileId },
+    });
+    if (existing) {
+      this.logger.log(`QR code already exists for staff profile ${staffProfileId}, skipping`);
+      return;
+    }
+
+    const shortCode = await this.generateShortCode();
+    const appUrl = this.configService.get<string>('APP_URL', 'https://app.taktip.com');
+    const url = `${appUrl}/tip/${shortCode}`;
+
+    const qrCode = this.qrCodeRepository.create({
+      merchantId,
+      staffProfileId,
+      shortCode,
+      url,
+      isActive: true,
+    } as Partial<QrCode>);
+
+    await this.qrCodeRepository.save(qrCode);
+
+    this.logger.log(`QR code auto-generated for staff profile ${staffProfileId}`);
+  }
+
+  /**
    * Look up a QR code by its short code. Used by the public tip resolution endpoint.
    */
   async findByShortCode(shortCode: string): Promise<QrCode | null> {
