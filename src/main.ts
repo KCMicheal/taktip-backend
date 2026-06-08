@@ -1,5 +1,6 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { SchemaObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface';
@@ -13,6 +14,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { QrCodesModule } from './qrcodes/qrcodes.module';
 import { TipsModule } from './tips/tips.module';
 import { PayoutsModule } from './payouts/payouts.module';
+import { ShiftsModule } from './shifts/shifts.module';
 import { BankModule } from './bank/bank.module';
 import { EnumTransformPipe } from './common/pipes/enum-transform.pipe';
 
@@ -134,7 +136,9 @@ const responseSchemas: Record<string, SchemaObject> = {
 };
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true,
+  });
   const configService = app.get(ConfigService);
 
   // ========== CORS Configuration ==========
@@ -189,7 +193,7 @@ async function bootstrap() {
     .build();
 
   const baseDocument = SwaggerModule.createDocument(app, baseConfig, {
-    include: [AuthModule, HealthModule, StaffModule, MerchantModule, WalletModule, PaymentsModule, QrCodesModule, TipsModule, PayoutsModule, BankModule],
+    include: [AuthModule, HealthModule, StaffModule, MerchantModule, WalletModule, PaymentsModule, QrCodesModule, TipsModule, PayoutsModule, ShiftsModule, BankModule],
     deepScanRoutes: true,
   });
 
