@@ -252,7 +252,7 @@ export class MerchantService {
 
     // Query wallet balance for this merchant
     const walletResult: { balance: string }[] = await this.merchantRepository.manager.query(
-      'SELECT balance FROM wallets WHERE "merchantId" = $1 LIMIT 1',
+      'SELECT balance_available AS balance FROM wallets WHERE "merchantId" = $1 LIMIT 1',
       [merchantId],
     );
     const walletBalance =

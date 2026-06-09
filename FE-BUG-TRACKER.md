@@ -42,3 +42,29 @@
 - **Files Changed**: Same as Box #2 (fixed simultaneously)
 - **Status**: ✅ FIXED
 - **Verified**:
+
+---
+
+## Box #4 — POST /v1/merchant/{merchantId}/invite accept missing auto QR code generation
+- **Filed**: 2026-06-08 (FE request)
+- **Description**: When staff accepts an invite, no QR code is auto-generated for them. FE expects a QR code to be created automatically after wallet creation.
+- **Root Cause**: `InviteService.acceptInvite()` created wallet but didn't generate QR code.
+- **Files Changed**:
+  - `src/qrcodes/qrcodes.service.ts` — added idempotent `ensureStaffQrCode(staffProfileId, merchantId)` method
+  - `src/merchant/services/invite.service.ts` — inject `QrCodesService`, call `ensureStaffQrCode()` after wallet creation
+  - `src/merchant/merchant.module.ts` — import `QrCodesModule` for DI resolution
+  - `test/qrcodes/qrcodes.service.spec.ts` — added 2 tests for `ensureStaffQrCode`
+  - `test/merchant/services/invite.service.spec.ts` — added `QrCodesService` mock
+- **Status**: ✅ FIXED (commit 91ace43)
+- **Verified**: ✅ lint, typecheck, build, tests pass
+
+---
+
+## Box #5 — PATCH /v1/merchant/{id} currency update returns 500
+- **Filed**: 2026-06-08 (FE request)
+- **Description**: Updating merchant currency throws 500 Internal Server Error.
+- **Root Cause**: Raw SQL in `MerchantService.updateCurrencyCascade()` used `"merchant_id"` but DB column is `"merchantId"` (camelCase).
+- **Files Changed**:
+  - `src/merchant/merchant.service.ts` — fixed column name in raw SQL query (line 215)
+- **Status**: ✅ FIXED (commit 91ace43)
+- **Verified**: ✅ lint, typecheck, build, tests pass
