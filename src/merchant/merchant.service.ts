@@ -251,9 +251,11 @@ export class MerchantService {
       .then((r: { count: string }) => parseInt(r.count, 10));
 
     // Query wallet balance for this merchant
+    // Note: wallets column was renamed from "merchantId" to "owner_id" by
+    // migration 1720000000002-RefactorWalletSchema.
     const walletResult: { balance: string }[] = await this.merchantRepository.manager.query(
-      'SELECT balance_available AS balance FROM wallets WHERE "merchantId" = $1 LIMIT 1',
-      [merchantId],
+      'SELECT balance_available AS balance FROM wallets WHERE "owner_id" = $1 AND "owner_type" = $2 LIMIT 1',
+      [merchantId, 'merchant'],
     );
     const walletBalance =
       walletResult.length > 0 ? parseFloat(walletResult[0].balance) : 0;
@@ -296,7 +298,7 @@ export class MerchantService {
     const qb = this.staffProfileRepository
       .createQueryBuilder('sp')
       .leftJoinAndSelect('sp.user', 'u')
-      .where('sp.merchantId = :merchantId', { merchantId });
+      .where('sp."merchantId" = :merchantId', { merchantId });
 
     // Apply search filter (case-insensitive, partial match)
     if (search) {
