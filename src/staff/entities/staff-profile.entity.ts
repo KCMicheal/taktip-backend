@@ -3,7 +3,6 @@ import {
   Column,
   ManyToOne,
   JoinColumn,
-  OneToOne,
   Index,
 } from 'typeorm';
 import { BaseEntity } from '../../common/entities/base.entity';
@@ -16,7 +15,7 @@ export class StaffProfile extends BaseEntity {
   @Column({ type: 'uuid' })
   userId: string;
 
-  @OneToOne(() => User, { eager: true })
+  @ManyToOne(() => User, { eager: true })
   @JoinColumn({ name: 'userId' })
   user: User;
 
