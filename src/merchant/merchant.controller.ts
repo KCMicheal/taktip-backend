@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Post, Param, Body, Query, UseGuards, ParseUUIDPipe, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Controller, Get, Put, Post, Delete, Param, Body, Query, UseGuards, ParseUUIDPipe, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -341,6 +341,42 @@ export class MerchantController {
     return { status: 'success', data: invites };
   }
 
+  @Delete(':merchantId/invite/:inviteId')
+  @UseGuards(RolesGuard)
+  @Roles(Role.MERCHANT)
+  @ApiOperation({ summary: 'Cancel a pending invite (soft delete)' })
+  @ApiParam({ name: 'merchantId', description: 'Merchant UUID' })
+  @ApiParam({ name: 'inviteId', description: 'Invite UUID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Invite cancelled successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        message: { type: 'string', example: 'Invite cancelled successfully' },
+      },
+    },
+  })
+  @ApiResponse({ status: 403, description: 'Not authorized to cancel this invite' })
+  @ApiResponse({ status: 404, description: 'Invite not found' })
+  async cancelInvite(
+    @Param('merchantId', ParseUUIDPipe) merchantId: string,
+    @Param('inviteId', ParseUUIDPipe) inviteId: string,
+    @CurrentUser() user: { sub: string },
+  ) {
+    // Get the merchant to check ownership
+    const merchant = await this.merchantService.getMerchantById(merchantId);
+
+    // Check if the current user owns this merchant or is admin
+    if (merchant.ownerId !== user.sub) {
+      throw new ForbiddenException('Not authorized to cancel invites for this merchant');
+    }
+
+    await this.inviteService.cancelInvite(inviteId, user.sub);
+    return { status: 'success', message: 'Invite cancelled successfully' };
+  }
+
   @Get(':merchantId/summary')
   @ApiOperation({
     summary: 'Get merchant summary for account deletion check',
@@ -398,6 +434,7 @@ export class MerchantController {
   @ApiQuery({ name: 'search', required: false, type: String, description: 'Search by name, email, or employeeCode (case-insensitive, partial match)' })
   @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
   @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default: 20)' })
+  @ApiQuery({ name: 'clockedIn', required: false, type: Boolean, description: 'When true, only return staff who are currently clocked in' })
   @ApiResponse({
     status: 200,
     description: 'Paginated list of staff members',
@@ -420,6 +457,7 @@ export class MerchantController {
                   email: { type: 'string', example: 'staff@example.com' },
                   phone: { type: 'string', nullable: true, example: '+2348012345678' },
                   isActive: { type: 'boolean', example: true },
+                  isClockedIn: { type: 'boolean', example: true },
                   employeeCode: { type: 'string', example: 'EMP-001', nullable: true },
                   createdAt: { type: 'string', format: 'date-time' },
                 },
@@ -439,6 +477,7 @@ export class MerchantController {
     @Param('merchantId', ParseUUIDPipe) merchantId: string,
     @CurrentUser() user: { sub: string },
     @Query() params: SearchablePaginationParamsDto,
+    @Query('clockedIn') clockedIn?: string,
   ) {
     // Get the merchant to check ownership
     const merchant = await this.merchantService.getMerchantById(merchantId);
@@ -448,11 +487,15 @@ export class MerchantController {
       throw new ForbiddenException('Not authorized to view staff for this merchant');
     }
 
+    // Parse clockedIn query param: only apply filter when explicitly "true"
+    const clockedInFilter = clockedIn === 'true' ? true : undefined;
+
     const staff = await this.merchantService.getMerchantStaff(
       merchantId,
       params.search,
       params.page,
       params.limit,
+      clockedInFilter,
     );
     return { status: 'success', data: staff };
   }

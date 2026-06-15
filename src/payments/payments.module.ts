@@ -13,10 +13,11 @@ import { PaystackProvider } from './providers/paystack/paystack.provider';
 import { PaymentEventService } from './payment-event.service';
 import { Tip } from '../tips/entities/tip.entity';
 import { Wallet } from '../wallet/entities/wallet.entity';
+import { StaffProfile } from '../staff/entities/staff-profile.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Payment, PaymentEvent, Tip, Wallet]),
+    TypeOrmModule.forFeature([Payment, PaymentEvent, Tip, Wallet, StaffProfile]),
     ConfigModule,
     QrCodesModule,
     TipsModule,

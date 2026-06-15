@@ -281,6 +281,7 @@ export class MerchantService {
     search?: string,
     page: number = 1,
     limit: number = 20,
+    clockedIn?: boolean,
   ): Promise<PaginatedResult<{
     id: string;
     userId: string;
@@ -309,6 +310,11 @@ export class MerchantService {
         'LOWER(sp.employeeCode) LIKE :search)',
         { search: `%${search.toLowerCase()}%` },
       );
+    }
+
+    // Apply clocked-in filter — when true, only return staff currently clocked in
+    if (clockedIn === true) {
+      qb.andWhere('sp.isClockedIn = :clockedIn', { clockedIn: true });
     }
 
     qb.orderBy('sp.createdAt', 'DESC');

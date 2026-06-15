@@ -39,13 +39,25 @@ import { Tip } from '../tips/entities/tip.entity';
 import { TipSource } from '../tips/enums/tip-source.enum';
 import { TipStatus } from '../tips/enums/tip-status.enum';
 import { Payment } from './entities/payment.entity';
+import { StaffProfile } from '../staff/entities/staff-profile.entity';
 
 // ───────── DTOs ─────────
 
 class InitiateGuestTipDto {
-  @ApiProperty({ example: '550e8400-e29b-41d4-a716-446655440000', description: 'QR code UUID' })
+  @ApiPropertyOptional({ example: '550e8400-e29b-41d4-a716-446655440000', description: 'QR code UUID (required for QR-code flow)' })
+  @IsOptional()
   @IsUUID()
-  qrCodeId: string;
+  qrCodeId?: string;
+
+  @ApiPropertyOptional({ description: 'Merchant UUID (required for merchant-link flow)' })
+  @IsOptional()
+  @IsUUID()
+  merchantId?: string;
+
+  @ApiPropertyOptional({ description: 'Staff profile UUID (required for merchant-link flow)' })
+  @IsOptional()
+  @IsUUID()
+  staffProfileId?: string;
 
   @ApiProperty({ example: 500.0, description: 'Tip amount in NGN' })
   @IsNumber()
@@ -88,16 +100,22 @@ export class PaymentsController {
     private readonly tipRepository: Repository<Tip>,
     @InjectRepository(Payment)
     private readonly paymentRepository: Repository<Payment>,
+    @InjectRepository(StaffProfile)
+    private readonly staffProfileRepository: Repository<StaffProfile>,
   ) {}
 
   /**
    * POST /guest/tip
    *
-   * Guest tip flow:
-   * 1. Guest scans a QR code
-   * 2. This endpoint resolves the QR code, creates a PENDING Tip and Payment,
-   *    and initializes a checkout with the configured payment provider
-   * 3. Returns the authorization URL to the frontend
+   * Guest tip flow — supports TWO entry paths:
+   *
+   * Path A — QR code flow (guest scans a staff QR code):
+   *   { qrCodeId, amount, message?, email? }
+   *
+   * Path B — Merchant-link flow (guest lands on /tip/{merchantShortCode}):
+   *   { merchantId, staffProfileId, amount, message?, email? }
+   *
+   * Both paths create a PENDING Tip + Payment and return a checkout URL.
    */
   @Post('guest/tip')
   @Public()
@@ -105,9 +123,10 @@ export class PaymentsController {
   @ApiOperation({
     summary: 'Initiate a guest tip checkout',
     description:
-      'Resolves a QR code, creates a PENDING tip and payment record, and returns a ' +
-      'checkout URL from the configured payment provider. ' +
-      'Redirect the guest to the authorizationUrl to complete payment.',
+      'Supports two payload shapes: (1) { qrCodeId, amount } for QR-code flow, ' +
+      'or (2) { merchantId, staffProfileId, amount } for merchant-link flow. ' +
+      'Creates a PENDING tip and payment record, then returns a checkout URL ' +
+      'from the configured payment provider.',
   })
   @ApiResponse({
     status: 200,
@@ -127,36 +146,53 @@ export class PaymentsController {
     },
   })
   @ApiResponse({
-    status: 400,
-    description: 'Invalid input or QR code without staff assignment',
+    status: 200,
+    description: 'Invalid payload — neither QR-code nor merchant-link fields provided',
     schema: { type: 'object', properties: { status: { type: 'string', example: 'error' }, data: { type: 'null' } } },
   })
-  @ApiResponse({ status: 404, description: 'QR code not found or inactive', type: ErrorResponseDto })
   async initiateGuestTip(
     @Body() dto: InitiateGuestTipDto,
   ): Promise<{ status: string; data: InitiateGuestTipResponseDto | null }> {
-    // 1. Resolve QR code to get merchant and staff profile
-    const qrCode = await this.qrCodeRepository.findOne({
-      where: { id: dto.qrCodeId, isActive: true },
-    });
+    // ── Resolve merchant and staff profile from either payload shape ──
+    let merchantId: string;
+    let staffProfileId: string;
+    let qrCodeId: string | null = null;
+    let sourceLabel: string;
 
-    if (!qrCode) {
-      return {
-        status: 'error',
-        data: null,
-      };
+    if (dto.qrCodeId) {
+      // ── Path A: QR-code flow ──
+      const qrCode = await this.qrCodeRepository.findOne({
+        where: { id: dto.qrCodeId, isActive: true },
+      });
+
+      if (!qrCode || !qrCode.staffProfileId) {
+        return { status: 'error', data: null };
+      }
+
+      merchantId = qrCode.merchantId;
+      staffProfileId = qrCode.staffProfileId;
+      qrCodeId = dto.qrCodeId;
+      sourceLabel = `qrCode: ${dto.qrCodeId}`;
+    } else if (dto.merchantId && dto.staffProfileId) {
+      // ── Path B: Merchant-link flow ──
+      // Verify the staff profile exists and belongs to the given merchant
+      const profile = await this.staffProfileRepository.findOne({
+        where: { id: dto.staffProfileId, merchantId: dto.merchantId },
+      });
+
+      if (!profile) {
+        return { status: 'error', data: null };
+      }
+
+      merchantId = dto.merchantId;
+      staffProfileId = dto.staffProfileId;
+      sourceLabel = `merchant: ${dto.merchantId}, staff: ${dto.staffProfileId}`;
+    } else {
+      // Neither shape was provided
+      return { status: 'error', data: null };
     }
 
-    const { merchantId, staffProfileId } = qrCode;
-
-    if (!staffProfileId) {
-      return {
-        status: 'error',
-        data: null,
-      };
-    }
-
-    // 2. Create a Tip record with PENDING status and GUEST source
+    // ── Create a Tip record with PENDING status and GUEST source ──
     const tip = this.tipRepository.create({
       merchantId,
       staffProfileId,
@@ -165,13 +201,13 @@ export class PaymentsController {
       message: dto.message || null,
       source: TipSource.GUEST,
       tipStatus: TipStatus.PENDING,
-      qrCodeId: dto.qrCodeId,
+      qrCodeId,
     } as Partial<Tip>);
 
     const savedTip = await this.tipRepository.save(tip);
-    this.logger.log(`Tip ${savedTip.id} created (PENDING, ref qrCode: ${dto.qrCodeId})`);
+    this.logger.log(`Tip ${savedTip.id} created (PENDING, ${sourceLabel})`);
 
-    // 3. Initialize transaction with the configured payment provider
+    // ── Initialize transaction with the configured payment provider ──
     const email = dto.email || 'guest@taktip.com';
     const result = await this.paymentProvider.initializeTransaction({
       email,
@@ -180,11 +216,11 @@ export class PaymentsController {
         tipId: savedTip.id,
         merchantId,
         staffProfileId,
-        qrCodeId: dto.qrCodeId,
+        qrCodeId,
       },
     } as InitializeTransactionParams);
 
-    // 4. Link the Payment to the Tip
+    // ── Link the Payment to the Tip ──
     await this.paymentRepository.update(
       { reference: result.reference },
       { tipId: savedTip.id },
