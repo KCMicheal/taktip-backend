@@ -105,8 +105,8 @@ describe('MerchantService', () => {
       expect(result.activeSubscriptions).toBe(0);
       expect(mockManager.createQueryBuilder).toHaveBeenCalled();
       expect(mockManager.query).toHaveBeenCalledWith(
-        'SELECT balance FROM wallets WHERE "merchantId" = $1 LIMIT 1',
-        ['merchant-uuid'],
+        'SELECT balance_available AS balance FROM wallets WHERE "owner_id" = $1 AND "owner_type" = $2 LIMIT 1',
+        ['merchant-uuid', 'merchant'],
       );
     });
 
@@ -181,7 +181,7 @@ describe('MerchantService', () => {
       // Check query builder chain
       expect(staffProfileRepository.createQueryBuilder).toHaveBeenCalledWith('sp');
       expect(qbMock.leftJoinAndSelect).toHaveBeenCalledWith('sp.user', 'u');
-      expect(qbMock.where).toHaveBeenCalledWith('sp.merchantId = :merchantId', { merchantId: 'merchant-uuid' });
+      expect(qbMock.where).toHaveBeenCalledWith('sp."merchantId" = :merchantId', { merchantId: 'merchant-uuid' });
       expect(qbMock.andWhere).not.toHaveBeenCalled(); // no search
       expect(qbMock.orderBy).toHaveBeenCalledWith('sp.createdAt', 'DESC');
       expect(qbMock.skip).toHaveBeenCalledWith(0);
