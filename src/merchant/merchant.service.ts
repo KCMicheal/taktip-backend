@@ -1,10 +1,11 @@
-import { Injectable, ConflictException, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, ConflictException, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Between, Like } from 'typeorm';
 import { Merchant } from './entities/merchant.entity';
 import { StaffProfile } from '../staff/entities/staff-profile.entity';
 import { BusinessType } from '../common/enums/business-type.enum';
 import { EntityStatus } from '../common/enums/entity-status.enum';
+import { KycStatus } from './enums/kyc-status.enum';
 import { PaginationService, PaginatedResult } from '../common/pagination';
 
 @Injectable()
@@ -341,5 +342,99 @@ export class MerchantService {
     }));
 
     return this.paginationService.wrap(items, total, page, limit);
+  }
+
+  // ---------------------------------------------------------------------------
+  //  Admin-facing methods
+  // ---------------------------------------------------------------------------
+
+  /**
+   * GET /admin/merchants
+   * Paginated merchant list for the admin console, with optional filters.
+   */
+  async findAllAdmin(
+    filters: {
+      status?: EntityStatus;
+      kycStatus?: KycStatus;
+      search?: string;
+      dateFrom?: Date;
+      dateTo?: Date;
+    },
+    page: number = 1,
+    limit: number = 20,
+  ): Promise<PaginatedResult<Merchant>> {
+    const qb = this.merchantRepository
+      .createQueryBuilder('m')
+      .leftJoin('m.owner', 'u')
+      // Select only safe owner fields — exclude passwordHash, otpHash, otpExpiry
+      .addSelect(['u.id', 'u.email', 'u.firstName', 'u.lastName']);
+
+    if (filters.status !== undefined && typeof filters.status === 'number') {
+      qb.andWhere('m.status = :status', { status: filters.status });
+    }
+
+    if (filters.kycStatus !== undefined && typeof filters.kycStatus === 'number') {
+      qb.andWhere('m.kycStatus = :kycStatus', { kycStatus: filters.kycStatus });
+    }
+
+    if (filters.search) {
+      qb.andWhere(
+        '(LOWER(m.name) LIKE :search OR LOWER(u.email) LIKE :search)',
+        { search: `%${filters.search.toLowerCase()}%` },
+      );
+    }
+
+    if (filters.dateFrom) {
+      qb.andWhere('m.createdAt >= :dateFrom', { dateFrom: filters.dateFrom });
+    }
+
+    if (filters.dateTo) {
+      qb.andWhere('m.createdAt <= :dateTo', { dateTo: filters.dateTo });
+    }
+
+    qb.orderBy('m.createdAt', 'DESC');
+
+    const skip = this.paginationService.getSkip(page, limit);
+    const [items, total] = await qb
+      .skip(skip)
+      .take(limit)
+      .getManyAndCount();
+
+    return this.paginationService.wrap(items, total, page, limit);
+  }
+
+  /**
+   * PATCH /admin/merchants/:id/approve
+   * Approve a merchant's KYC, activating their account.
+   */
+  async approveMerchant(merchantId: string, adminId: string): Promise<Merchant> {
+    const merchant = await this.getMerchantById(merchantId);
+
+    if (merchant.kycStatus === KycStatus.APPROVED) {
+      throw new BadRequestException('Merchant KYC is already approved');
+    }
+
+    merchant.kycStatus = KycStatus.APPROVED;
+    merchant.status = EntityStatus.ACTIVE;
+    merchant.approvedBy = adminId;
+    merchant.approvedAt = new Date();
+
+    return this.merchantRepository.save(merchant);
+  }
+
+  /**
+   * PATCH /admin/merchants/:id/suspend
+   * Suspend a merchant account.
+   */
+  async suspendMerchant(merchantId: string): Promise<Merchant> {
+    const merchant = await this.getMerchantById(merchantId);
+
+    if (merchant.status === EntityStatus.SUSPENDED) {
+      throw new BadRequestException('Merchant is already suspended');
+    }
+
+    merchant.status = EntityStatus.SUSPENDED;
+
+    return this.merchantRepository.save(merchant);
   }
 }

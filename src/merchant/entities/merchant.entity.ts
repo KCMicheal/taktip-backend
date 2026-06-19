@@ -2,6 +2,7 @@ import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from '../../common/entities/base.entity';
 import { BusinessType } from '../../common/enums/business-type.enum';
 import { User } from '../../auth/entities/user.entity';
+import { KycStatus } from '../enums/kyc-status.enum';
 
 @Entity('merchants')
 export class Merchant extends BaseEntity {
@@ -57,4 +58,16 @@ export class Merchant extends BaseEntity {
   @ManyToOne(() => User)
   @JoinColumn({ name: 'ownerId' })
   owner: User;
+
+  @Column({
+    type: 'int',
+    default: KycStatus.PENDING,
+  })
+  kycStatus: KycStatus;
+
+  @Column({ type: 'uuid', nullable: true })
+  approvedBy: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  approvedAt: Date | null;
 }
