@@ -1,18 +1,19 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { MerchantService } from '../../../src/merchant/merchant.service';
 import { Merchant } from '../../../src/merchant/entities/merchant.entity';
 import { StaffProfile } from '../../../src/staff/entities/staff-profile.entity';
 import { BusinessType } from '../../../src/common/enums/business-type.enum';
+import { EntityStatus } from '../../../src/common/enums/entity-status.enum';
+import { KycStatus } from '../../../src/merchant/enums/kyc-status.enum';
 import { PaginationService } from '../../../src/common/pagination/pagination.service';
 
 describe('MerchantService', () => {
   let service: MerchantService;
   let merchantRepository: jest.Mocked<Repository<Merchant>>;
   let staffProfileRepository: jest.Mocked<Repository<StaffProfile>>;
-  let paginationService: PaginationService;
 
   const mockMerchant: Partial<Merchant> = {
     id: 'merchant-uuid',
@@ -70,8 +71,10 @@ describe('MerchantService', () => {
           provide: getRepositoryToken(Merchant),
           useValue: {
             findOne: jest.fn(),
+            find: jest.fn(),
             create: jest.fn(),
             save: jest.fn(),
+            createQueryBuilder: jest.fn(),
             manager: mockManager,
           },
         },
@@ -86,7 +89,6 @@ describe('MerchantService', () => {
     }).compile();
 
     service = module.get<MerchantService>(MerchantService);
-    paginationService = module.get<PaginationService>(PaginationService);
     merchantRepository = module.get(getRepositoryToken(Merchant));
     staffProfileRepository = module.get(getRepositoryToken(StaffProfile));
 
@@ -254,6 +256,134 @@ describe('MerchantService', () => {
       expect(result.items[0].email).toBe(''); // fallback to empty string
       expect(result.items[0].displayName).toBeNull();
       expect(result.items[0].isClockedIn).toBe(false);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  //  Admin-facing methods
+  // ---------------------------------------------------------------------------
+
+  describe('findAllAdmin', () => {
+    const createMerchantQbMock = () => ({
+      leftJoin: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+    });
+
+    it('should return paginated merchants with safe owner fields only', async () => {
+      const qbMock = createMerchantQbMock();
+      const merchants = [
+        { id: 'merchant-1', name: 'Restaurant A', owner: { email: 'owner@example.com' } },
+        { id: 'merchant-2', name: 'Restaurant B', owner: { email: 'owner2@example.com' } },
+      ];
+      qbMock.getManyAndCount.mockResolvedValue([merchants, 2]);
+      (merchantRepository.createQueryBuilder as jest.Mock).mockReturnValue(qbMock);
+
+      const result = await service.findAllAdmin({}, 1, 20);
+
+      expect(result.items).toHaveLength(2);
+      expect(result.total).toBe(2);
+      // Should use leftJoin (NOT leftJoinAndSelect) and only select safe owner fields
+      expect(qbMock.leftJoin).toHaveBeenCalledWith('m.owner', 'u');
+      expect(qbMock.addSelect).toHaveBeenCalledWith(
+        ['u.id', 'u.email', 'u.firstName', 'u.lastName'],
+      );
+    });
+
+    it('should filter by status when provided', async () => {
+      const qbMock = createMerchantQbMock();
+      (merchantRepository.createQueryBuilder as jest.Mock).mockReturnValue(qbMock);
+
+      await service.findAllAdmin({ status: EntityStatus.ACTIVE }, 1, 20);
+
+      expect(qbMock.andWhere).toHaveBeenCalledWith('m.status = :status', { status: 1 });
+    });
+
+    it('should filter by kycStatus when provided', async () => {
+      const qbMock = createMerchantQbMock();
+      (merchantRepository.createQueryBuilder as jest.Mock).mockReturnValue(qbMock);
+
+      await service.findAllAdmin({ kycStatus: KycStatus.PENDING }, 1, 20);
+
+      expect(qbMock.andWhere).toHaveBeenCalledWith('m.kycStatus = :kycStatus', { kycStatus: 1 });
+    });
+
+    it('should search by name or owner email', async () => {
+      const qbMock = createMerchantQbMock();
+      (merchantRepository.createQueryBuilder as jest.Mock).mockReturnValue(qbMock);
+
+      await service.findAllAdmin({ search: 'test' }, 1, 20);
+
+      expect(qbMock.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining('LOWER(m.name) LIKE'),
+        { search: '%test%' },
+      );
+    });
+  });
+
+  describe('approveMerchant', () => {
+    it('should set kycStatus to APPROVED and record admin info', async () => {
+      const merchant = { id: 'merchant-uuid', kycStatus: KycStatus.PENDING } as Merchant;
+      merchantRepository.findOne.mockResolvedValue(merchant);
+      merchantRepository.save.mockImplementation((m: unknown) => Promise.resolve(m as Merchant));
+
+      const result = await service.approveMerchant('merchant-uuid', 'admin-uuid');
+
+      expect(result.kycStatus).toBe(KycStatus.APPROVED);
+      expect(result.status).toBe(EntityStatus.ACTIVE);
+      expect(result.approvedBy).toBe('admin-uuid');
+      expect(result.approvedAt).toBeInstanceOf(Date);
+    });
+
+    it('should throw BadRequestException if already approved', async () => {
+      const merchant = { id: 'merchant-uuid', kycStatus: KycStatus.APPROVED } as Merchant;
+      merchantRepository.findOne.mockResolvedValue(merchant);
+
+      await expect(
+        service.approveMerchant('merchant-uuid', 'admin-uuid'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw NotFoundException if merchant does not exist', async () => {
+      merchantRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.approveMerchant('nonexistent', 'admin-uuid'),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('suspendMerchant', () => {
+    it('should set status to SUSPENDED', async () => {
+      const merchant = { id: 'merchant-uuid', status: EntityStatus.ACTIVE } as Merchant;
+      merchantRepository.findOne.mockResolvedValue(merchant);
+      merchantRepository.save.mockImplementation((m: unknown) => Promise.resolve(m as Merchant));
+
+      const result = await service.suspendMerchant('merchant-uuid');
+
+      expect(result.status).toBe(EntityStatus.SUSPENDED);
+    });
+
+    it('should throw BadRequestException if already suspended', async () => {
+      const merchant = { id: 'merchant-uuid', status: EntityStatus.SUSPENDED } as Merchant;
+      merchantRepository.findOne.mockResolvedValue(merchant);
+
+      await expect(
+        service.suspendMerchant('merchant-uuid'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw NotFoundException if merchant does not exist', async () => {
+      merchantRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.suspendMerchant('nonexistent'),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });
