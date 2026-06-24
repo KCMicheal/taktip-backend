@@ -10,6 +10,7 @@ import {
   ApiBearerAuth,
   ApiOperation,
   ApiResponse,
+  ApiExtraModels,
 } from '@nestjs/swagger';
 import { PayoutService } from './payouts.service';
 import { RequestPayoutDto } from './dto/request-payout.dto';
@@ -33,6 +34,7 @@ class SuccessResponseDto<T> {
 
 @ApiTags('payouts')
 @ApiBearerAuth()
+@ApiExtraModels(PayoutResponseDto)
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.STAFF, Role.ADMIN)
 @Controller('staff/payouts')
@@ -48,19 +50,7 @@ export class StaffPayoutController {
       type: 'object',
       properties: {
         status: { type: 'string', example: 'success' },
-        data: {
-          type: 'object',
-          properties: {
-            id: { type: 'string', format: 'uuid' },
-            amount: { type: 'number', example: 5000 },
-            fee: { type: 'number', example: 50 },
-            netAmount: { type: 'number', example: 4950 },
-            status: { type: 'string', example: 'PENDING' },
-            reference: { type: 'string', example: 'POUT-1712345678-abcd1234' },
-            processedAt: { type: 'string', format: 'date-time', nullable: true },
-            createdAt: { type: 'string', format: 'date-time' },
-          },
-        },
+        data: { $ref: '#/components/schemas/PayoutResponseDto' },
       },
     },
   })

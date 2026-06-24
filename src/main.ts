@@ -18,6 +18,7 @@ import { ShiftsModule } from './shifts/shifts.module';
 import { BankModule } from './bank/bank.module';
 import { CustomerTipsModule } from './customer-tips/customer-tips.module';
 import { EnumTransformPipe } from './common/pipes/enum-transform.pipe';
+import { ResponseEnumInterceptor } from './common/interceptors/response-enum.interceptor';
 
 // Response schemas - defined inline to ensure they're included
 const responseSchemas: Record<string, SchemaObject> = {
@@ -167,7 +168,7 @@ async function bootstrap() {
   // Set global prefix to 'api' (version comes from API_VERSION env)
   app.setGlobalPrefix(`api/${apiVersion}`);
 
-  // Global validation pipe
+  // Global validation pipe & request enum conversion
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -176,6 +177,9 @@ async function bootstrap() {
     }),
     new EnumTransformPipe(),
   );
+
+  // Global response interceptor — converts numeric enum values to string names
+  app.useGlobalInterceptors(new ResponseEnumInterceptor());
 
   const swaggerUrls = [];
 

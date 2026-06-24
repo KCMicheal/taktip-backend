@@ -522,6 +522,14 @@ describe('ShiftsService (staff)', () => {
     const mockMonday = new Date('2026-06-01T00:00:00.000Z'); // Monday
     const mockSunday = new Date('2026-06-07T23:59:59.999Z');
 
+    beforeEach(() => {
+      jest.useFakeTimers({ now: mockMonday });
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
     it('should return this week\'s schedule', async () => {
       const profile = createMockProfile();
       const shift = createMockShift({

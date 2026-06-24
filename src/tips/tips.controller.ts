@@ -16,6 +16,7 @@ import {
   ApiQuery,
   ApiParam,
   ApiResponse,
+  ApiExtraModels,
 } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -24,14 +25,15 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Role } from '../auth/enums/role.enum';
-import { TipsService } from './tips.service';
 import { TipResponseDto } from './dto/tip-response.dto';
+import { TipsService } from './tips.service';
 import { ErrorResponseDto } from '../auth/dto/response.dto';
 import { StaffProfile } from '../staff/entities/staff-profile.entity';
 import { Merchant } from '../merchant/entities/merchant.entity';
 
 @ApiTags('tips')
 @ApiBearerAuth()
+@ApiExtraModels(TipResponseDto)
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller()
 export class TipsController {
@@ -144,17 +146,13 @@ export class TipsController {
       properties: {
         status: { type: 'string', example: 'success' },
         data: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              id: { type: 'string', format: 'uuid' },
-              amount: { type: 'number', example: 500 },
-              currency: { type: 'string', example: 'NGN' },
-              message: { type: 'string', nullable: true, example: 'Great service!' },
-              rating: { type: 'number', nullable: true, example: 5 },
-              createdAt: { type: 'string', format: 'date-time' },
+          type: 'object',
+          properties: {
+            tips: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/TipResponseDto' },
             },
+            total: { type: 'number', example: 42 },
           },
         },
       },
@@ -202,11 +200,11 @@ export class TipsController {
         data: {
           type: 'object',
           properties: {
-            totalTips: { type: 'number', example: 15000 },
-            totalTipsCount: { type: 'number', example: 42 },
-            averageRating: { type: 'number', example: 4.5 },
-            periodStart: { type: 'string', format: 'date', nullable: true },
-            periodEnd: { type: 'string', format: 'date', nullable: true },
+            totalAmount: { type: 'number', example: 15000 },
+            tipCount: { type: 'number', example: 42 },
+            averageTip: { type: 'number', example: 357.14 },
+            periodStart: { type: 'string', format: 'date-time', nullable: true },
+            periodEnd: { type: 'string', format: 'date-time', nullable: true },
           },
         },
       },
