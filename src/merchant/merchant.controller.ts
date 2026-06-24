@@ -12,7 +12,6 @@ import { InviteStaffDto } from './dto/invite.dto';
 import { UpdateMerchantDto } from './dto/update-merchant.dto';
 import { SearchablePaginationParamsDto, InvitePaginationParamsDto } from '../common/pagination';
 import { TipsService } from '../tips/tips.service';
-import { TipResponseDto } from '../tips/dto/tip-response.dto';
 
 @ApiTags('merchant')
 @ApiBearerAuth()
@@ -35,8 +34,22 @@ export class MerchantController {
   @ApiResponse({
     status: 200,
     description: 'Paginated tips list with staff names',
-    type: TipResponseDto,
-    isArray: true,
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            tips: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/TipResponseDto' },
+            },
+            total: { type: 'number', example: 42 },
+          },
+        },
+      },
+    },
   })
   @ApiResponse({ status: 403, description: 'Access denied: Merchant role required', type: ErrorResponseDto })
   async getMerchantTips(
@@ -498,5 +511,48 @@ export class MerchantController {
       clockedInFilter,
     );
     return { status: 'success', data: staff };
+  }
+
+  @Delete(':merchantId/staff/:staffId')
+  @UseGuards(RolesGuard)
+  @Roles(Role.MERCHANT)
+  @ApiOperation({ summary: 'Remove a staff member from the merchant (soft delete)' })
+  @ApiParam({ name: 'merchantId', description: 'Merchant UUID' })
+  @ApiParam({ name: 'staffId', description: 'Staff profile UUID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Staff removed successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        message: { type: 'string', example: 'Staff removed successfully' },
+        data: {
+          type: 'object',
+          properties: {
+            walletBalance: { type: 'number', example: 0 },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Cannot remove a staff member who is currently clocked in' })
+  @ApiResponse({ status: 403, description: 'Not authorized to remove staff for this merchant' })
+  @ApiResponse({ status: 404, description: 'Staff profile not found' })
+  async removeStaff(
+    @Param('merchantId', ParseUUIDPipe) merchantId: string,
+    @Param('staffId', ParseUUIDPipe) staffId: string,
+    @CurrentUser() user: { sub: string },
+  ) {
+    // Get the merchant to check ownership
+    const merchant = await this.merchantService.getMerchantById(merchantId);
+
+    // Check if the current user owns this merchant or is admin
+    if (merchant.ownerId !== user.sub) {
+      throw new ForbiddenException('Not authorized to remove staff for this merchant');
+    }
+
+    const result = await this.merchantService.removeStaff(merchantId, staffId);
+    return { status: 'success', message: 'Staff removed successfully', data: result };
   }
 }

@@ -184,7 +184,7 @@ describe('MerchantService', () => {
       expect(staffProfileRepository.createQueryBuilder).toHaveBeenCalledWith('sp');
       expect(qbMock.leftJoinAndSelect).toHaveBeenCalledWith('sp.user', 'u');
       expect(qbMock.where).toHaveBeenCalledWith('sp."merchantId" = :merchantId', { merchantId: 'merchant-uuid' });
-      expect(qbMock.andWhere).not.toHaveBeenCalled(); // no search
+      expect(qbMock.andWhere).toHaveBeenCalledWith('sp.status = :activeStatus', { activeStatus: 1 });
       expect(qbMock.orderBy).toHaveBeenCalledWith('sp.createdAt', 'DESC');
       expect(qbMock.skip).toHaveBeenCalledWith(0);
       expect(qbMock.take).toHaveBeenCalledWith(20);
@@ -384,6 +384,124 @@ describe('MerchantService', () => {
       await expect(
         service.suspendMerchant('nonexistent'),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // removeStaff
+  // ---------------------------------------------------------------------------
+  describe('removeStaff', () => {
+    const merchantId = 'merchant-uuid';
+    const staffId = 'staff-uuid';
+
+    const mockProfile = {
+      id: staffId,
+      merchantId,
+      isClockedIn: false,
+      currentShiftId: null,
+      status: EntityStatus.ACTIVE,
+      userId: 'user-uuid',
+    } as StaffProfile;
+
+    const mockEntityManager = {
+      query: jest.fn(),
+      update: jest.fn(),
+    };
+
+    beforeEach(() => {
+      // StaffProfile mock only provides find/createQueryBuilder by default.
+      // Add findOne + manager for the removeStaff code-path.
+      staffProfileRepository.findOne = jest.fn();
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      (staffProfileRepository as any).manager = {
+        transaction: jest.fn().mockImplementation(
+          async (cb: (em: typeof mockEntityManager) => Promise<void>) => {
+            await cb(mockEntityManager);
+          },
+        ),
+      };
+    });
+
+    it('should throw NotFoundException if staff profile not found', async () => {
+      staffProfileRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.removeStaff(merchantId, staffId),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(staffProfileRepository.findOne).toHaveBeenCalledWith({
+        where: { id: staffId, merchantId },
+      });
+    });
+
+    it('should throw NotFoundException if staff profile is already deleted', async () => {
+      staffProfileRepository.findOne.mockResolvedValue({
+        ...mockProfile,
+        status: EntityStatus.DELETED,
+      });
+
+      await expect(
+        service.removeStaff(merchantId, staffId),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException if staff is clocked in', async () => {
+      staffProfileRepository.findOne.mockResolvedValue({
+        ...mockProfile,
+        isClockedIn: true,
+        currentShiftId: 'active-shift-uuid',
+      });
+
+      await expect(
+        service.removeStaff(merchantId, staffId),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.removeStaff(merchantId, staffId),
+      ).rejects.toThrow(/clocked in/i);
+    });
+
+    it('should remove future shift assignments, freeze wallet, and soft-delete profile', async () => {
+      staffProfileRepository.findOne.mockResolvedValue(mockProfile);
+      mockEntityManager.query.mockResolvedValue([{ balance_available: '15000' }]);
+
+      const result = await service.removeStaff(merchantId, staffId);
+
+      // 1. Removed future shift assignments via raw SQL
+      expect(mockEntityManager.query).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining('DELETE FROM shift_staff'),
+        [staffId, merchantId],
+      );
+
+      // 2. Froze wallet with INACTIVE status
+      expect(mockEntityManager.query).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('UPDATE wallets'),
+        [EntityStatus.INACTIVE, expect.any(Date), staffId, 'staff'],
+      );
+
+      // 3. Soft-deleted the staff profile
+      expect(mockEntityManager.update).toHaveBeenCalledWith(
+        StaffProfile,
+        { id: staffId },
+        {
+          status: EntityStatus.DELETED,
+          isClockedIn: false,
+          currentShiftId: null,
+        },
+      );
+
+      expect(result).toEqual({ walletBalance: 15000 });
+    });
+
+    it('should return walletBalance 0 when staff has no wallet', async () => {
+      staffProfileRepository.findOne.mockResolvedValue(mockProfile);
+      // Wallet query returns empty — no wallet exists
+      mockEntityManager.query.mockResolvedValue([]);
+
+      const result = await service.removeStaff(merchantId, staffId);
+
+      expect(result).toEqual({ walletBalance: 0 });
     });
   });
 });

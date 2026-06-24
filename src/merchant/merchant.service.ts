@@ -1,10 +1,11 @@
 import { Injectable, ConflictException, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, Like } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Merchant } from './entities/merchant.entity';
 import { StaffProfile } from '../staff/entities/staff-profile.entity';
 import { BusinessType } from '../common/enums/business-type.enum';
 import { EntityStatus } from '../common/enums/entity-status.enum';
+import { ShiftStatus } from '../shifts/enums/shift-status.enum';
 import { KycStatus } from './enums/kyc-status.enum';
 import { PaginationService, PaginatedResult } from '../common/pagination';
 
@@ -300,7 +301,8 @@ export class MerchantService {
     const qb = this.staffProfileRepository
       .createQueryBuilder('sp')
       .leftJoinAndSelect('sp.user', 'u')
-      .where('sp."merchantId" = :merchantId', { merchantId });
+      .where('sp."merchantId" = :merchantId', { merchantId })
+      .andWhere('sp.status = :activeStatus', { activeStatus: EntityStatus.ACTIVE });
 
     // Apply search filter (case-insensitive, partial match)
     if (search) {
@@ -342,6 +344,83 @@ export class MerchantService {
     }));
 
     return this.paginationService.wrap(items, total, page, limit);
+  }
+
+  /**
+   * DELETE /merchant/:merchantId/staff/:staffId
+   * Soft-delete a staff profile.  Validates the staff member is not clocked in,
+   * removes future shift assignments, freezes their wallet, then marks the
+   * profile as deleted.
+   *
+   * @returns The staff's frozen wallet balance.
+   */
+  async removeStaff(
+    merchantId: string,
+    staffId: string,
+  ): Promise<{ walletBalance: number }> {
+    // Step 1 — Find the staff profile
+    const profile = await this.staffProfileRepository.findOne({
+      where: { id: staffId, merchantId },
+    });
+    if (!profile || profile.status === EntityStatus.DELETED) {
+      throw new NotFoundException('Staff profile not found for this merchant');
+    }
+
+    // Step 2 — Validate not clocked in
+    if (profile.isClockedIn) {
+      throw new BadRequestException(
+        'Cannot remove a staff member who is currently clocked in. ' +
+          'End their shift first or wait for them to clock out.',
+      );
+    }
+
+    // Step 3 — Execute all mutations in a single transaction
+    let walletBalance = 0;
+
+    await this.staffProfileRepository.manager.transaction(
+      async (entityManager) => {
+        // a) Remove future shift assignments (DRAFT or PUBLISHED shifts)
+        await entityManager.query(
+          `DELETE FROM shift_staff
+           WHERE "staffProfileId" = $1
+           AND "shiftId" IN (
+             SELECT id FROM shifts
+             WHERE "merchantId" = $2 AND status IN (${ShiftStatus.DRAFT}, ${ShiftStatus.PUBLISHED})
+           )`,
+          [staffId, merchantId],
+        );
+
+        // b) Freeze the staff wallet (INACTIVE, lockedUntil far future)
+        const farFuture = new Date('2038-01-01T00:00:00.000Z');
+        const walletResult = await entityManager.query<{ balance_available: string }[]>(
+          `UPDATE wallets
+           SET status = $1, "locked_until" = $2
+           WHERE "owner_id" = $3 AND "owner_type" = $4
+           RETURNING balance_available`,
+          [EntityStatus.INACTIVE, farFuture, staffId, 'staff'],
+        );
+        if (walletResult.length > 0) {
+          walletBalance = parseFloat(walletResult[0].balance_available) || 0;
+        }
+
+        // c) Soft-delete the staff profile
+        await entityManager.update(
+          StaffProfile,
+          { id: staffId },
+          {
+            status: EntityStatus.DELETED,
+            isClockedIn: false,
+            currentShiftId: null,
+          },
+        );
+
+        this.logger.log(
+          `Staff profile ${staffId} soft-deleted from merchant ${merchantId}`,
+        );
+      },
+    );
+
+    return { walletBalance };
   }
 
   // ---------------------------------------------------------------------------

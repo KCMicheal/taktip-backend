@@ -665,6 +665,16 @@ describe('MerchantShiftsService', () => {
   // getRoster
   // ---------------------------------------------------------------------------
   describe('getRoster', () => {
+    const mockMonday = new Date('2026-06-01T00:00:00.000Z');
+
+    beforeEach(() => {
+      jest.useFakeTimers({ now: mockMonday });
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
     it('should return weekly roster grouped by day', async () => {
       const merchant = createMockMerchant();
       const shift = createMockShift({
@@ -720,6 +730,16 @@ describe('MerchantShiftsService', () => {
   // publishRoster
   // ---------------------------------------------------------------------------
   describe('publishRoster', () => {
+    const mockMonday = new Date('2026-06-01T00:00:00.000Z');
+
+    beforeEach(() => {
+      jest.useFakeTimers({ now: mockMonday });
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
     it('should publish all draft shifts in the current week', async () => {
       const merchant = createMockMerchant();
       const draftShift = createMockShift({

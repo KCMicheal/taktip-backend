@@ -127,7 +127,36 @@ export class TipsService {
     staffProfileId: string,
     startDate?: Date,
     endDate?: Date,
-  ): Promise<{ totalAmount: number; tipCount: number }> {
+  ): Promise<{
+    totalAmount: number;
+    tipCount: number;
+    averageTip: number;
+    periodStart: string | null;
+    periodEnd: string | null;
+  }> {
+    // Default to today if no date range provided
+    if (!startDate && !endDate) {
+      const now = new Date();
+      startDate = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        0,
+        0,
+        0,
+        0,
+      );
+      endDate = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        23,
+        59,
+        59,
+        999,
+      );
+    }
+
     const where: Record<string, unknown> = {
       staffProfileId,
     };
@@ -149,6 +178,16 @@ export class TipsService {
       0,
     );
 
-    return { totalAmount, tipCount: tips.length };
+    const tipCount = tips.length;
+    const averageTip =
+      tipCount > 0 ? Math.round((totalAmount / tipCount) * 100) / 100 : 0;
+
+    return {
+      totalAmount,
+      tipCount,
+      averageTip,
+      periodStart: startDate ? startDate.toISOString() : null,
+      periodEnd: endDate ? endDate.toISOString() : null,
+    };
   }
 }
