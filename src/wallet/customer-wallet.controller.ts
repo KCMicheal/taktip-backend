@@ -5,6 +5,7 @@ import {
   Body,
   Query,
   UseGuards,
+  BadRequestException,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -211,6 +212,9 @@ export class CustomerWalletController {
     if (!staffProfile) {
       throw new NotFoundException('Staff profile not found');
     }
+    if (!staffProfile.merchantId) {
+      throw new BadRequestException('Staff profile is not associated with any merchant');
+    }
 
     // 3. Get staff wallet
     const staffWallet = await this.walletService.getStaffWallet(staffProfile.id);
@@ -224,7 +228,7 @@ export class CustomerWalletController {
 
     // 5. Record the tip with COMPLETED status (funds moved atomically)
     const tip = await this.tipsService.recordTip({
-      merchantId: staffProfile.merchantId!,
+      merchantId: staffProfile.merchantId,
       staffProfileId: staffProfile.id,
       customerProfileId,
       amount: dto.amount,

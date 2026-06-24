@@ -15,11 +15,8 @@ import {
   ApiResponse,
 } from '@nestjs/swagger';
 import { CustomerTipsService } from './customer-tips.service';
-import {
-  SendCustomerTipDto,
-  SearchCustomersQueryDto,
-  TipHistoryQueryDto,
-} from './dto/send-customer-tip.dto';
+import { SendCustomerTipDto, SearchCustomersQueryDto } from './dto/send-customer-tip.dto';
+import { PaginationParamsDto } from '../common/pagination';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -77,14 +74,9 @@ export class CustomerTipsController {
   @ApiResponse({ status: 200, description: 'Matching customers' })
   async searchCustomers(
     @CurrentUser() user: { sub: string; role: Role },
-    @Query('q') q: string,
-    @Query('limit') limit?: string,
+    @Query() query: SearchCustomersQueryDto,
   ) {
-    const limitNum = limit ? Math.min(parseInt(limit, 10) || 20, 50) : 20;
-    const results = await this.customerTipsService.searchCustomers({
-      q,
-      limit: limitNum,
-    } as SearchCustomersQueryDto);
+    const results = await this.customerTipsService.searchCustomers(query);
     return { status: 'success', data: results };
   }
 
@@ -105,15 +97,9 @@ export class CustomerTipsController {
   @ApiResponse({ status: 200, description: 'Paginated sent/received tips' })
   async getMyTipHistory(
     @CurrentUser() user: { sub: string; role: Role },
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
+    @Query() query: PaginationParamsDto,
   ) {
-    const pageNum = page ? parseInt(page, 10) || 1 : 1;
-    const limitNum = limit ? Math.min(parseInt(limit, 10) || 20, 100) : 20;
-    const results = await this.customerTipsService.getMyTipHistory(user, {
-      page: pageNum,
-      limit: limitNum,
-    } as TipHistoryQueryDto);
+    const results = await this.customerTipsService.getMyTipHistory(user, query);
     return { status: 'success', data: results };
   }
 }

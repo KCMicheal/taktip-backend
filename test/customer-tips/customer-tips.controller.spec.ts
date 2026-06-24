@@ -213,7 +213,7 @@ describe('CustomerTipsController', () => {
 
       mockCustomerTipsService.searchCustomers.mockResolvedValue(mockResults);
 
-      const result = await controller.searchCustomers(mockUser, 'John', '10');
+      const result = await controller.searchCustomers(mockUser, { q: 'John', limit: 10 });
 
       expect(result.status).toBe('success');
       expect(result.data).toHaveLength(2);
@@ -224,25 +224,13 @@ describe('CustomerTipsController', () => {
       });
     });
 
-    it('should use default limit of 20 when not provided', async () => {
+    it('should pass query DTO through when limit is omitted', async () => {
       mockCustomerTipsService.searchCustomers.mockResolvedValue([]);
 
-      await controller.searchCustomers(mockUser, 'Test', undefined);
+      await controller.searchCustomers(mockUser, { q: 'Test' });
 
       expect(mockCustomerTipsService.searchCustomers).toHaveBeenCalledWith({
         q: 'Test',
-        limit: 20,
-      });
-    });
-
-    it('should cap limit at 50', async () => {
-      mockCustomerTipsService.searchCustomers.mockResolvedValue([]);
-
-      await controller.searchCustomers(mockUser, 'Test', '100');
-
-      expect(mockCustomerTipsService.searchCustomers).toHaveBeenCalledWith({
-        q: 'Test',
-        limit: 50,
       });
     });
   });
@@ -250,52 +238,37 @@ describe('CustomerTipsController', () => {
   describe('GET /customer/tips/history', () => {
     it('should return paginated tip history', async () => {
       const mockHistory = {
-        sent: [{ id: 'tip-1', amount: 1000 }],
-        received: [{ id: 'tip-2', amount: 500 }],
-        totalSent: 1,
-        totalReceived: 1,
-        page: 1,
-        limit: 20,
+        sent: { items: [{ id: 'tip-1', amount: 1000 }], total: 1, page: 1, limit: 20 },
+        received: { items: [{ id: 'tip-2', amount: 500 }], total: 1, page: 1, limit: 20 },
       };
 
       mockCustomerTipsService.getMyTipHistory.mockResolvedValue(mockHistory);
 
-      const result = await controller.getMyTipHistory(mockUser, '1', '20');
+      const result = await controller.getMyTipHistory(mockUser, { page: 1, limit: 20 });
 
       expect(result.status).toBe('success');
-      expect(result.data.sent).toHaveLength(1);
-      expect(result.data.received).toHaveLength(1);
-      expect(result.data.totalSent).toBe(1);
-      expect(result.data.page).toBe(1);
+      expect(result.data.sent.items).toHaveLength(1);
+      expect(result.data.received.items).toHaveLength(1);
+      expect(result.data.sent.total).toBe(1);
+      expect(result.data.sent.page).toBe(1);
       expect(mockCustomerTipsService.getMyTipHistory).toHaveBeenCalledWith(
         mockUser,
         { page: 1, limit: 20 },
       );
     });
 
-    it('should use default pagination values', async () => {
-      mockCustomerTipsService.getMyTipHistory.mockResolvedValue({
-        sent: [], received: [], totalSent: 0, totalReceived: 0, page: 1, limit: 20,
-      });
+    it('should pass query params through to service', async () => {
+      const emptyHistory = {
+        sent: { items: [], total: 0, page: 1, limit: 20 },
+        received: { items: [], total: 0, page: 1, limit: 20 },
+      };
+      mockCustomerTipsService.getMyTipHistory.mockResolvedValue(emptyHistory);
 
-      await controller.getMyTipHistory(mockUser, undefined, undefined);
-
-      expect(mockCustomerTipsService.getMyTipHistory).toHaveBeenCalledWith(
-        mockUser,
-        { page: 1, limit: 20 },
-      );
-    });
-
-    it('should cap limit at 100', async () => {
-      mockCustomerTipsService.getMyTipHistory.mockResolvedValue({
-        sent: [], received: [], totalSent: 0, totalReceived: 0, page: 1, limit: 100,
-      });
-
-      await controller.getMyTipHistory(mockUser, '1', '200');
+      await controller.getMyTipHistory(mockUser, { page: 2, limit: 50 });
 
       expect(mockCustomerTipsService.getMyTipHistory).toHaveBeenCalledWith(
         mockUser,
-        { page: 1, limit: 100 },
+        { page: 2, limit: 50 },
       );
     });
   });

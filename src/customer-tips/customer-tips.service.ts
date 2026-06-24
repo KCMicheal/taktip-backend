@@ -24,8 +24,8 @@ import { MailService } from '../auth/services/mail.service';
 import {
   SendCustomerTipDto,
   SearchCustomersQueryDto,
-  TipHistoryQueryDto,
 } from './dto/send-customer-tip.dto';
+import { PaginationService, PaginatedResult, PaginationParamsDto } from '../common/pagination';
 
 /**
  * Maximum tip amount per transaction (user-defined limit).
@@ -56,6 +56,7 @@ export class CustomerTipsService {
     private readonly walletService: WalletService,
     private readonly configService: ConfigService,
     private readonly mailService: MailService,
+    private readonly paginationService: PaginationService,
   ) {}
 
   /**
@@ -260,7 +261,7 @@ export class CustomerTipsService {
   async searchCustomers(
     query: SearchCustomersQueryDto,
   ): Promise<{ id: string; displayName: string; avatarUrl: string | null; email: string }[]> {
-    const limit = query.limit || 20;
+    const limit = query.limit ?? 20;
     const searchTerm = `%${query.q}%`;
 
     // Search via raw query for cross-table search
@@ -296,35 +297,33 @@ export class CustomerTipsService {
    */
   async getMyTipHistory(
     user: { sub: string; role: Role },
-    query: TipHistoryQueryDto,
+    query: PaginationParamsDto,
   ): Promise<{
-    sent: Tip[];
-    received: Tip[];
-    totalSent: number;
-    totalReceived: number;
-    page: number;
-    limit: number;
+    sent: PaginatedResult<Tip>;
+    received: PaginatedResult<Tip>;
   }> {
     const profile = await this.customerService.getByUserId(user.sub);
-    const page = query.page || 1;
-    const limit = query.limit || 20;
-    const skip = (page - 1) * limit;
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
 
     const [sent, totalSent] = await this.tipRepository.findAndCount({
       where: { senderId: profile.id, recipientType: 'customer' },
       order: { createdAt: 'DESC' },
-      skip,
+      skip: this.paginationService.getSkip(page, limit),
       take: limit,
     });
 
     const [received, totalReceived] = await this.tipRepository.findAndCount({
       where: { staffProfileId: profile.id, recipientType: 'customer' },
       order: { createdAt: 'DESC' },
-      skip,
+      skip: this.paginationService.getSkip(page, limit),
       take: limit,
     });
 
-    return { sent, received, totalSent, totalReceived, page, limit };
+    return {
+      sent: this.paginationService.wrap(sent, totalSent, page, limit),
+      received: this.paginationService.wrap(received, totalReceived, page, limit),
+    };
   }
 
   /**

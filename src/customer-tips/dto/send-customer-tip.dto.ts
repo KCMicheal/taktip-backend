@@ -1,4 +1,5 @@
 import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { C2cTipFundingSource } from '../../tips/enums/c2c-tip-funding-source.enum';
 
@@ -67,29 +68,9 @@ export class SearchCustomersQueryDto {
     example: 20,
   })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(1)
   @Max(50)
-  limit?: number;
-}
-
-export class TipHistoryQueryDto {
-  @ApiPropertyOptional({
-    description: 'Page number (default: 1)',
-    example: 1,
-  })
-  @IsOptional()
-  @IsNumber()
-  @Min(1)
-  page?: number;
-
-  @ApiPropertyOptional({
-    description: 'Items per page (default: 20, max: 100)',
-    example: 20,
-  })
-  @IsOptional()
-  @IsNumber()
-  @Min(1)
-  @Max(100)
-  limit?: number;
+  limit?: number = 20;
 }

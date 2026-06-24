@@ -387,10 +387,14 @@ export class PaystackProvider implements PaymentProvider {
     tip: Tip,
     amount: number,
   ): Promise<void> {
-    // Resolve recipient customer profile (stored in staffProfileId)
-    const recipientProfile = await this.customerProfileRepository.findOne({
-      where: { id: tip.staffProfileId },
-    });
+    // Resolve recipient profile and sender profile in parallel
+    const [recipientProfile, senderProfile] = await Promise.all([
+      this.customerProfileRepository.findOne({ where: { id: tip.staffProfileId } }),
+      tip.customerProfileId
+        ? this.customerProfileRepository.findOne({ where: { id: tip.customerProfileId } })
+        : Promise.resolve(null),
+    ]);
+
     if (!recipientProfile?.userId) {
       this.logger.warn(`Cannot notify C2C recipient ${tip.staffProfileId}: profile not found`);
       return;
@@ -405,16 +409,7 @@ export class PaystackProvider implements PaymentProvider {
       return;
     }
 
-    // Resolve sender display name from the sender's customer profile
-    let senderName = 'A customer';
-    if (tip.customerProfileId) {
-      const senderProfile = await this.customerProfileRepository.findOne({
-        where: { id: tip.customerProfileId },
-      });
-      if (senderProfile?.displayName) {
-        senderName = senderProfile.displayName;
-      }
-    }
+    const senderName = senderProfile?.displayName || 'A customer';
 
     await this.mailService.sendTipReceivedEmail(
       recipientUser.email,

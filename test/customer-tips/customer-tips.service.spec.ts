@@ -17,6 +17,7 @@ import { C2cTipFundingSource } from '../../src/tips/enums/c2c-tip-funding-source
 import { C2cTipSenderType } from '../../src/tips/enums/c2c-tip-sender-type.enum';
 import { Role } from '../../src/auth/enums/role.enum';
 import { PaymentProvider } from '../../src/payments/providers/interfaces/payment-provider.interface';
+import { PaginationService } from '../../src/common/pagination/pagination.service';
 
 describe('CustomerTipsService', () => {
   let service: CustomerTipsService;
@@ -29,6 +30,7 @@ describe('CustomerTipsService', () => {
   let walletService: Record<string, jest.Mock>;
   let configService: Record<string, jest.Mock>;
   let mailService: Record<string, jest.Mock>;
+  let paginationService: Record<string, jest.Mock>;
 
   // ── Mock data ──
 
@@ -146,6 +148,12 @@ describe('CustomerTipsService', () => {
       sendTipReceivedEmail: jest.fn().mockResolvedValue(undefined),
     };
 
+    paginationService = {
+      paginate: jest.fn(),
+      wrap: jest.fn(),
+      getSkip: jest.fn().mockImplementation((page: number, limit: number) => (page - 1) * limit),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CustomerTipsService,
@@ -184,6 +192,10 @@ describe('CustomerTipsService', () => {
         {
           provide: MailService,
           useValue: mailService,
+        },
+        {
+          provide: PaginationService,
+          useValue: paginationService,
         },
       ],
     }).compile();
@@ -501,18 +513,22 @@ describe('CustomerTipsService', () => {
         { id: 'tip-3', staffProfileId: 'sender-profile-uuid', amount: 500, recipientType: 'customer' },
       ];
 
+      paginationService.wrap
+        .mockReturnValueOnce({ items: sentTips, total: 2, page: 1, limit: 20 })
+        .mockReturnValueOnce({ items: receivedTips, total: 1, page: 1, limit: 20 });
+
       tipRepository.findAndCount
         .mockResolvedValueOnce([sentTips, 2])   // sent
         .mockResolvedValueOnce([receivedTips, 1]); // received
 
       const result = await service.getMyTipHistory(mockUser, { page: 1, limit: 20 });
 
-      expect(result.sent).toHaveLength(2);
-      expect(result.received).toHaveLength(1);
-      expect(result.totalSent).toBe(2);
-      expect(result.totalReceived).toBe(1);
-      expect(result.page).toBe(1);
-      expect(result.limit).toBe(20);
+      expect(result.sent.items).toHaveLength(2);
+      expect(result.received.items).toHaveLength(1);
+      expect(result.sent.total).toBe(2);
+      expect(result.received.total).toBe(1);
+      expect(result.sent.page).toBe(1);
+      expect(result.sent.limit).toBe(20);
 
       expect(tipRepository.findAndCount).toHaveBeenCalledTimes(2);
       // First call: sent tips
