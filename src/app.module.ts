@@ -8,6 +8,7 @@ import { CommonModule } from './common/common.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { StaffModule } from './staff/staff.module';
+import { MerchantModule } from './merchant/merchant.module';
 import { WalletModule } from './wallet/wallet.module';
 import { CustomerModule } from './customer/customer.module';
 import { QueueModule } from './queue/queue.module';
@@ -15,6 +16,7 @@ import { PayoutsModule } from './payouts/payouts.module';
 import { PaymentsModule } from './payments/payments.module';
 import { QrCodesModule } from './qrcodes/qrcodes.module';
 import { TipsModule } from './tips/tips.module';
+import { CustomerTipsModule } from './customer-tips/customer-tips.module';
 import { ShiftsModule } from './shifts/shifts.module';
 import { BankModule } from './bank/bank.module';
 import { AdminModule } from './admin/admin.module';
@@ -75,6 +77,7 @@ import { GlobalExceptionFilter } from './common/filters/global-exception.filter'
     }),
     QrCodesModule,
     BankModule,
+    MerchantModule,
     WalletModule,
     AuthModule,
     HealthModule,
@@ -84,6 +87,7 @@ import { GlobalExceptionFilter } from './common/filters/global-exception.filter'
     PayoutsModule,
     PaymentsModule,
     TipsModule,
+    CustomerTipsModule,
     ShiftsModule,
     AdminModule,
   ],

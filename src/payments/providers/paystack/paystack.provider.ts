@@ -16,7 +16,11 @@ import { PaymentEventService } from '../../payment-event.service';
 import { PaymentEventType } from '../../enums/payment-event.enum';
 import { Tip } from '../../../tips/entities/tip.entity';
 import { TipStatus } from '../../../tips/enums/tip-status.enum';
+import { TipSource } from '../../../tips/enums/tip-source.enum';
 import { Wallet } from '../../../wallet/entities/wallet.entity';
+import { CustomerProfile } from '../../../customer/entities/customer-profile.entity';
+import { User } from '../../../auth/entities/user.entity';
+import { MailService } from '../../../auth/services/mail.service';
 
 @Injectable()
 export class PaystackProvider implements PaymentProvider {
@@ -32,8 +36,13 @@ export class PaystackProvider implements PaymentProvider {
     private readonly tipRepository: Repository<Tip>,
     @InjectRepository(Wallet)
     private readonly walletRepository: Repository<Wallet>,
+    @InjectRepository(CustomerProfile)
+    private readonly customerProfileRepository: Repository<CustomerProfile>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     private readonly configService: ConfigService,
     private readonly paymentEventService: PaymentEventService,
+    private readonly mailService: MailService,
   ) {
     const secretKey = this.configService.get<string>('PAYSTACK_SECRET_KEY', '');
     this.paystack = new Paystack(secretKey);
@@ -277,17 +286,37 @@ export class PaystackProvider implements PaymentProvider {
         await this.tipRepository.save(tip);
         this.logger.log(`Tip ${tip.id} marked as COMPLETED`);
 
-        // Credit the staff wallet's balance_pending atomically
         const amount = Number(tip.amount);
-        await this.walletRepository.manager.query(
-          'UPDATE "wallets" SET "balance_pending" = CAST("balance_pending" AS numeric(15,2)) + $1 WHERE "owner_id" = $2 AND "owner_type" = $3',
-          [amount, tip.staffProfileId, 'staff'],
-        );
 
-        this.logger.log(
-          `Credited ${amount} to balance_pending of staff wallet ` +
-            `(staffProfileId: ${tip.staffProfileId})`,
-        );
+        // ── C2C card tip: credit recipient customer wallet ──
+        if (tip.source === TipSource.CUSTOMER_TO_CUSTOMER) {
+          // staffProfileId is repurposed as the recipient customer profile ID
+          await this.walletRepository.manager.query(
+            'UPDATE "wallets" SET "balance_pending" = CAST("balance_pending" AS numeric(15,2)) + $1 WHERE "owner_id" = $2 AND "owner_type" = $3',
+            [amount, tip.staffProfileId, 'customer'],
+          );
+
+          this.logger.log(
+            `Credited ${amount} to balance_pending of recipient customer wallet ` +
+              `(customerProfileId: ${tip.staffProfileId})`,
+          );
+
+          // Send email notification to recipient (fire-and-forget)
+          this.notifyC2cTipRecipient(tip, amount).catch(
+            (err: Error) => this.logger.error(`Failed to send C2C tip email: ${err.message}`, err.stack),
+          );
+        } else {
+          // ── Staff tip: credit staff wallet ──
+          await this.walletRepository.manager.query(
+            'UPDATE "wallets" SET "balance_pending" = CAST("balance_pending" AS numeric(15,2)) + $1 WHERE "owner_id" = $2 AND "owner_type" = $3',
+            [amount, tip.staffProfileId, 'staff'],
+          );
+
+          this.logger.log(
+            `Credited ${amount} to balance_pending of staff wallet ` +
+              `(staffProfileId: ${tip.staffProfileId})`,
+          );
+        }
       } else {
         this.logger.warn(`Tip not found for id: ${payment.tipId}`);
       }
@@ -346,6 +375,52 @@ export class PaystackProvider implements PaymentProvider {
         this.logger.warn(`Tip not found for id: ${payment.tipId}`);
       }
     }
+  }
+
+  // ───────── C2C tip recipient notification ─────────
+
+  /**
+   * Send an email notification to the C2C tip recipient.
+   * Fire-and-forget — caller handles error logging.
+   */
+  private async notifyC2cTipRecipient(
+    tip: Tip,
+    amount: number,
+  ): Promise<void> {
+    // Resolve recipient customer profile (stored in staffProfileId)
+    const recipientProfile = await this.customerProfileRepository.findOne({
+      where: { id: tip.staffProfileId },
+    });
+    if (!recipientProfile?.userId) {
+      this.logger.warn(`Cannot notify C2C recipient ${tip.staffProfileId}: profile not found`);
+      return;
+    }
+
+    // Resolve recipient user email
+    const recipientUser = await this.userRepository.findOne({
+      where: { id: recipientProfile.userId },
+    });
+    if (!recipientUser?.email) {
+      this.logger.warn(`Cannot notify recipient ${tip.staffProfileId}: no email found`);
+      return;
+    }
+
+    // Resolve sender display name from the sender's customer profile
+    let senderName = 'A customer';
+    if (tip.customerProfileId) {
+      const senderProfile = await this.customerProfileRepository.findOne({
+        where: { id: tip.customerProfileId },
+      });
+      if (senderProfile?.displayName) {
+        senderName = senderProfile.displayName;
+      }
+    }
+
+    await this.mailService.sendTipReceivedEmail(
+      recipientUser.email,
+      senderName,
+      amount,
+    );
   }
 
   // ───────── Signature verification ─────────

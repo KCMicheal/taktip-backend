@@ -14,10 +14,13 @@ import { PaymentEventService } from './payment-event.service';
 import { Tip } from '../tips/entities/tip.entity';
 import { Wallet } from '../wallet/entities/wallet.entity';
 import { StaffProfile } from '../staff/entities/staff-profile.entity';
+import { CustomerProfile } from '../customer/entities/customer-profile.entity';
+import { User } from '../auth/entities/user.entity';
+import { MailService } from '../auth/services/mail.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Payment, PaymentEvent, Tip, Wallet, StaffProfile]),
+    TypeOrmModule.forFeature([Payment, PaymentEvent, Tip, Wallet, StaffProfile, CustomerProfile, User]),
     ConfigModule,
     QrCodesModule,
     TipsModule,
@@ -33,7 +36,10 @@ import { StaffProfile } from '../staff/entities/staff-profile.entity';
         paymentRepo: Repository<Payment>,
         tipRepo: Repository<Tip>,
         walletRepo: Repository<Wallet>,
+        customerProfileRepo: Repository<CustomerProfile>,
+        userRepo: Repository<User>,
         paymentEventService: PaymentEventService,
+        mailService: MailService,
       ) => {
         const providerName = configService.get<string>('PAYMENT_PROVIDER', 'paystack');
         switch (providerName) {
@@ -42,8 +48,11 @@ import { StaffProfile } from '../staff/entities/staff-profile.entity';
               paymentRepo,
               tipRepo,
               walletRepo,
+              customerProfileRepo,
+              userRepo,
               configService,
               paymentEventService,
+              mailService,
             );
           // Future providers:
           // case 'stripe':
@@ -57,7 +66,10 @@ import { StaffProfile } from '../staff/entities/staff-profile.entity';
         getRepositoryToken(Payment),
         getRepositoryToken(Tip),
         getRepositoryToken(Wallet),
+        getRepositoryToken(CustomerProfile),
+        getRepositoryToken(User),
         PaymentEventService,
+        MailService,
       ],
     },
   ],

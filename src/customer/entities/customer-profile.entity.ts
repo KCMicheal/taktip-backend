@@ -11,4 +11,17 @@ export class CustomerProfile extends BaseEntity {
   @OneToOne(() => User, { eager: true })
   @JoinColumn({ name: 'userId' })
   user: User;
+
+  /**
+   * Display name shown to other customers when receiving/sending tips.
+   * Falls back to user's first name if null.
+   */
+  @Column({ type: 'varchar', nullable: true, name: 'display_name' })
+  displayName: string | null;
+
+  /**
+   * Avatar image URL for customer profile.
+   */
+  @Column({ type: 'varchar', nullable: true, name: 'avatar_url' })
+  avatarUrl: string | null;
 }
