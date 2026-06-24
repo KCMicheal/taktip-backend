@@ -16,6 +16,7 @@ import { TipsModule } from './tips/tips.module';
 import { PayoutsModule } from './payouts/payouts.module';
 import { ShiftsModule } from './shifts/shifts.module';
 import { BankModule } from './bank/bank.module';
+import { CustomerTipsModule } from './customer-tips/customer-tips.module';
 import { EnumTransformPipe } from './common/pipes/enum-transform.pipe';
 
 // Response schemas - defined inline to ensure they're included
@@ -190,10 +191,11 @@ async function bootstrap() {
     .addTag('tips', 'Tip recording and queries')
     .addTag('payments', 'Paystack payment processing and webhooks')
     .addTag('payouts', 'Payout requests, approval, and processing (staff + admin)')
+    .addTag('Customer-to-Customer Tips', 'Send tips between customers (wallet or card funded)')
     .build();
 
   const baseDocument = SwaggerModule.createDocument(app, baseConfig, {
-    include: [AuthModule, HealthModule, StaffModule, MerchantModule, WalletModule, PaymentsModule, QrCodesModule, TipsModule, PayoutsModule, ShiftsModule, BankModule],
+    include: [AuthModule, HealthModule, StaffModule, MerchantModule, WalletModule, PaymentsModule, QrCodesModule, TipsModule, PayoutsModule, ShiftsModule, BankModule, CustomerTipsModule],
     deepScanRoutes: true,
   });
 

@@ -22,6 +22,7 @@ import { Merchant } from '../merchant/entities/merchant.entity';
 import { StaffProfile } from '../staff/entities/staff-profile.entity';
 import { CustomerProfile } from '../customer/entities/customer-profile.entity';
 import { PaginationService, PaginatedResult } from '../common/pagination';
+import { EntityStatus } from '../common/enums/entity-status.enum';
 
 /**
  * Response DTO for wallet creation
@@ -355,6 +356,27 @@ export class WalletService {
       return existing;
     }
     return this.createCustomerWallet(customerProfileId, currency);
+  }
+
+  /**
+   * Find a staff wallet by staff profile ID.
+   * Returns null if no wallet exists yet.
+   */
+  async findStaffWallet(staffProfileId: string): Promise<Wallet | null> {
+    return this.walletRepository.findOne({
+      where: { ownerId: staffProfileId, ownerType: 'staff', status: EntityStatus.ACTIVE },
+    });
+  }
+
+  /**
+   * Get a staff wallet by staff profile ID, or throw.
+   */
+  async getStaffWallet(staffProfileId: string): Promise<Wallet> {
+    const wallet = await this.findStaffWallet(staffProfileId);
+    if (!wallet) {
+      throw new NotFoundException('Staff wallet not found');
+    }
+    return wallet;
   }
 
   /**

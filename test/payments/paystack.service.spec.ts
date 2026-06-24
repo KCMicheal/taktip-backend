@@ -11,6 +11,9 @@ import { PaymentEvent } from '../../src/payments/entities/payment-event.entity';
 import { Tip } from '../../src/tips/entities/tip.entity';
 import { TipStatus } from '../../src/tips/enums/tip-status.enum';
 import { Wallet } from '../../src/wallet/entities/wallet.entity';
+import { CustomerProfile } from '../../src/customer/entities/customer-profile.entity';
+import { User } from '../../src/auth/entities/user.entity';
+import { MailService } from '../../src/auth/services/mail.service';
 
 // Mock the paystack-api library
 const mockInitialize = jest.fn();
@@ -52,6 +55,18 @@ describe('PaystackProvider', () => {
       query: jest.fn(),
       transaction: jest.fn(),
     },
+  };
+
+  const mockCustomerProfileRepository = {
+    findOne: jest.fn(),
+  };
+
+  const mockUserRepository = {
+    findOne: jest.fn(),
+  };
+
+  const mockMailService = {
+    sendMail: jest.fn().mockResolvedValue(true),
   };
 
   const mockPaymentEventRepository = {
@@ -133,6 +148,18 @@ describe('PaystackProvider', () => {
         {
           provide: ConfigService,
           useValue: mockConfigService,
+        },
+        {
+          provide: getRepositoryToken(CustomerProfile),
+          useValue: mockCustomerProfileRepository,
+        },
+        {
+          provide: getRepositoryToken(User),
+          useValue: mockUserRepository,
+        },
+        {
+          provide: MailService,
+          useValue: mockMailService,
         },
         PaymentEventService,
       ],

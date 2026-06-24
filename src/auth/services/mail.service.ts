@@ -247,4 +247,58 @@ export class MailService {
       }
     }
   }
+
+  /**
+   * Send tip received notification to a customer
+   */
+  async sendTipReceivedEmail(
+    email: string,
+    senderName: string,
+    amount: number,
+  ): Promise<void> {
+    const senderEmail = this.configService.get<string>('MAILJET_SENDER_EMAIL', 'noreply@taktip.com');
+    const senderLabel = this.configService.get<string>('MAILJET_SENDER_NAME', 'TakTip');
+    const formattedAmount = `₦${amount.toLocaleString()}`;
+
+    const emailContent = {
+      to: email,
+      toName: email.split('@')[0],
+      subject: `You received a tip of ${formattedAmount} on TakTip!`,
+      text: `Great news! ${senderName} sent you a tip of ${formattedAmount} on TakTip. It has been credited to your wallet.`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">You received a tip! 🎉</h2>
+          <p>Hello,</p>
+          <p><strong>${senderName}</strong> sent you a tip of <strong style="font-size: 20px;">${formattedAmount}</strong> on TakTip.</p>
+          <p>The amount has been credited to your TakTip wallet. You can view your transaction history in the app.</p>
+          <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+          <p style="color: #999; font-size: 12px;">TakTip - Digital Tipping Platform</p>
+        </div>
+      `,
+    };
+
+    try {
+      await this.sendEmail([
+        {
+          From: { Email: senderEmail, Name: senderLabel },
+          To: [{ Email: email, Name: emailContent.toName }],
+          Subject: emailContent.subject,
+          TextPart: emailContent.text,
+          HTMLPart: emailContent.html,
+        },
+      ]);
+
+      this.logger.log(`Tip received email sent to ${email} via MailJet`);
+    } catch (mailjetError) {
+      this.logger.warn(`MailJet failed for ${email}, using fallback:`, mailjetError);
+
+      try {
+        await this.emailFallbackService.sendEmail(emailContent);
+        this.logger.log(`Tip received email sent to ${email} via fallback (nodemailer)`);
+      } catch (fallbackError) {
+        this.logger.error(`All email services failed for ${email}:`, fallbackError);
+        // Don't throw — notification failure shouldn't block the tip
+      }
+    }
+  }
 }

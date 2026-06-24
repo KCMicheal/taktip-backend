@@ -1,0 +1,25 @@
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { CustomerTipsService } from './customer-tips.service';
+import { CustomerTipsController } from './customer-tips.controller';
+import { Tip } from '../tips/entities/tip.entity';
+import { CustomerProfile } from '../customer/entities/customer-profile.entity';
+import { Payment } from '../payments/entities/payment.entity';
+import { Wallet } from '../wallet/entities/wallet.entity';
+import { User } from '../auth/entities/user.entity';
+import { CustomerModule } from '../customer/customer.module';
+import { WalletModule } from '../wallet/wallet.module';
+import { PaymentsModule } from '../payments/payments.module';
+
+@Module({
+  imports: [
+    TypeOrmModule.forFeature([Tip, CustomerProfile, Payment, Wallet, User]),
+    CustomerModule,
+    WalletModule,
+    PaymentsModule,
+  ],
+  controllers: [CustomerTipsController],
+  providers: [CustomerTipsService],
+  exports: [CustomerTipsService],
+})
+export class CustomerTipsModule {}
