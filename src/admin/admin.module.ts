@@ -5,6 +5,8 @@ import { Merchant } from '../merchant/entities/merchant.entity';
 import { Payout } from '../payouts/entities/payout.entity';
 import { MerchantModule } from '../merchant/merchant.module';
 import { PayoutsModule } from '../payouts/payouts.module';
+import { AuditModule } from '../audit/audit.module';
+import { SupportModule } from '../support/support.module';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 
@@ -17,6 +19,10 @@ import { AdminService } from './admin.service';
     MerchantModule,
     // Import for PayoutService (future use)
     PayoutsModule,
+    // Import for AuditService
+    AuditModule,
+    // Import for SupportService
+    SupportModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],

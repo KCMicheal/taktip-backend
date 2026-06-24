@@ -266,6 +266,39 @@ export class PayoutService {
   }
 
   /**
+   * PATCH /v1/admin/payouts/:id/escalate
+   * Escalate a payout — marks it as requiring manual intervention.
+   * Only PENDING, APPROVED, or FAILED payouts can be escalated.
+   */
+  async escalatePayout(payoutId: string, adminId: string, reason?: string): Promise<Payout> {
+    const payout = await this.payoutRepository.findOne({
+      where: { id: payoutId },
+    });
+
+    if (!payout) {
+      throw new NotFoundException('Payout not found');
+    }
+
+    const allowedStatuses = [PayoutStatus.PENDING, PayoutStatus.APPROVED, PayoutStatus.FAILED];
+    if (!allowedStatuses.includes(payout.payoutStatus)) {
+      throw new BadRequestException(
+        `Cannot escalate payout in status ${PayoutStatus[payout.payoutStatus]}. Only PENDING, APPROVED, or FAILED payouts can be escalated.`,
+      );
+    }
+
+    payout.payoutStatus = PayoutStatus.ESCALATED;
+    payout.adminId = adminId;
+    payout.notes = reason || null;
+    await this.payoutRepository.save(payout);
+
+    this.logger.log(
+      `Payout ${payout.reference} escalated by admin ${adminId}${reason ? `: ${reason}` : ''}`,
+    );
+
+    return payout;
+  }
+
+  /**
    * Process a payout — called by the BullMQ processor.
    *
    * In production, this would call the Paystack Transfer API to send funds
