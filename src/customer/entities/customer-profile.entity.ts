@@ -20,8 +20,9 @@ export class CustomerProfile extends BaseEntity {
   displayName: string | null;
 
   /**
-   * Avatar image URL for customer profile.
+   * Base64-encoded avatar image (data:image/{png,jpeg,webp};base64,...).
+   * Max 512×512px, 500KB. Dimension validation happens at the service/DTO layer.
    */
-  @Column({ type: 'varchar', nullable: true, name: 'avatar_url' })
-  avatarUrl: string | null;
+  @Column({ type: 'text', nullable: true, name: 'avatar' })
+  avatar: string | null;
 }

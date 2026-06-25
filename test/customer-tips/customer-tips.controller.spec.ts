@@ -207,8 +207,8 @@ describe('CustomerTipsController', () => {
   describe('GET /customer/tips/search', () => {
     it('should return matching customers', async () => {
       const mockResults = [
-        { id: 'c1', displayName: 'John Doe', avatarUrl: null, email: 'john@example.com' },
-        { id: 'c2', displayName: 'Jane Smith', avatarUrl: 'https://example.com/avatar.jpg', email: 'jane@example.com' },
+        { id: 'c1', displayName: 'John Doe', avatar: null, email: 'john@example.com' },
+        { id: 'c2', displayName: 'Jane Smith', avatar: null, email: 'jane@example.com' },
       ];
 
       mockCustomerTipsService.searchCustomers.mockResolvedValue(mockResults);

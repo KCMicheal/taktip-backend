@@ -40,7 +40,7 @@ describe('CustomerTipsService', () => {
     id: 'sender-profile-uuid',
     userId: 'sender-user-uuid',
     displayName: 'Alice',
-    avatarUrl: null,
+    avatar: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -49,7 +49,7 @@ describe('CustomerTipsService', () => {
     id: 'recipient-profile-uuid',
     userId: 'recipient-user-uuid',
     displayName: 'Bob',
-    avatarUrl: null,
+    avatar: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -456,13 +456,13 @@ describe('CustomerTipsService', () => {
           {
             id: 'customer-1',
             displayName: 'John Doe',
-            avatarUrl: null,
+            avatar: null,
             user: { email: 'john@example.com', firstName: 'John', lastName: 'Doe' },
           },
           {
             id: 'customer-2',
             displayName: null,
-            avatarUrl: 'https://avatar.example.com/jane',
+            avatar: null,
             user: { email: 'jane@example.com', firstName: 'Jane', lastName: 'Smith' },
           },
         ]),
@@ -477,7 +477,7 @@ describe('CustomerTipsService', () => {
       expect(result[0].displayName).toBe('John Doe');
       expect(result[0].email).toBe('john@example.com');
       expect(result[1].displayName).toBe('Jane Smith'); // fallback to firstName + lastName
-      expect(result[1].avatarUrl).toBe('https://avatar.example.com/jane');
+      expect(result[1].avatar).toBeNull();
 
       expect(customerProfileRepository.createQueryBuilder).toHaveBeenCalledWith('cp');
       expect(mockQueryBuilder.take).toHaveBeenCalledWith(20);
