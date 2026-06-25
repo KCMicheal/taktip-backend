@@ -4,6 +4,7 @@ import {
   Patch,
   Param,
   Query,
+  Body,
   UseGuards,
   ParseUUIDPipe,
 } from '@nestjs/common';
@@ -20,9 +21,15 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Role } from '../auth/enums/role.enum';
 import { ErrorResponseDto } from '../auth/dto/response.dto';
-import { AdminService, DashboardStats } from './admin.service';
+import { AdminService, DashboardStats, AnalyticsResponse } from './admin.service';
 import { MerchantService } from '../merchant/merchant.service';
+import { AuditService } from '../audit/audit.service';
+import { SupportService } from '../support/support.service';
+import { UpdateTicketDto } from '../support/dto/update-ticket.dto';
+import { SupportTicketFilterDto } from '../support/dto/support-ticket-filter.dto';
 import { MerchantFilterDto } from './dto/merchant-filter.dto';
+import { AnalyticsFilterDto } from './dto/analytics-filter.dto';
+import { AuditFilterDto } from './dto/audit-filter.dto';
 import { UserFilterDto } from './dto/user-filter.dto';
 
 /**
@@ -42,6 +49,8 @@ export class AdminController {
   constructor(
     private readonly adminService: AdminService,
     private readonly merchantService: MerchantService,
+    private readonly auditService: AuditService,
+    private readonly supportService: SupportService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -79,6 +88,79 @@ export class AdminController {
   async getDashboardStats(): Promise<SuccessResponseDto<DashboardStats>> {
     const stats = await this.adminService.getDashboardStats();
     return { status: 'success', data: stats };
+  }
+
+  // ---------------------------------------------------------------------------
+  //  Analytics
+  // ---------------------------------------------------------------------------
+
+  @Get('analytics')
+  @ApiOperation({ summary: 'Get platform analytics over a date range' })
+  @ApiQuery({
+    name: 'dateFrom',
+    required: true,
+    type: String,
+    description: 'Start date (ISO 8601, inclusive)',
+  })
+  @ApiQuery({
+    name: 'dateTo',
+    required: false,
+    type: String,
+    description: 'End date (ISO 8601, inclusive). Defaults to now.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Aggregate analytics (tips, merchants, payouts, users)',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            period: {
+              type: 'object',
+              properties: {
+                dateFrom: { type: 'string', format: 'date-time' },
+                dateTo: { type: 'string', format: 'date-time' },
+              },
+            },
+            tips: {
+              type: 'object',
+              properties: {
+                total: { type: 'number' },
+                volume: { type: 'number' },
+                dailyBreakdown: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      date: { type: 'string' },
+                      count: { type: 'number' },
+                      volume: { type: 'number' },
+                    },
+                  },
+                },
+              },
+            },
+            merchants: { type: 'object' },
+            payouts: { type: 'object' },
+            users: { type: 'object' },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'dateFrom is required', type: ErrorResponseDto })
+  @ApiResponse({ status: 403, description: 'Access denied: Admin role required', type: ErrorResponseDto })
+  async getAnalytics(
+    @Query() filters: AnalyticsFilterDto,
+  ): Promise<SuccessResponseDto<AnalyticsResponse>> {
+    const dateFrom = new Date(filters.dateFrom);
+    const dateTo = filters.dateTo ? new Date(filters.dateTo) : new Date();
+
+    const data = await this.adminService.getAnalytics({ dateFrom, dateTo });
+    return { status: 'success', data };
   }
 
   // ---------------------------------------------------------------------------
@@ -155,6 +237,12 @@ export class AdminController {
     @CurrentUser() user: { sub: string },
   ): Promise<SuccessResponseDto<unknown>> {
     const merchant = await this.merchantService.approveMerchant(id, user.sub);
+    await this.auditService.log({
+      adminId: user.sub,
+      action: 'MERCHANT_APPROVE',
+      entityType: 'merchant',
+      entityId: id,
+    });
     return { status: 'success', data: merchant };
   }
 
@@ -165,8 +253,15 @@ export class AdminController {
   @ApiResponse({ status: 404, description: 'Merchant not found', type: ErrorResponseDto })
   async suspendMerchant(
     @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: { sub: string },
   ): Promise<SuccessResponseDto<unknown>> {
     const merchant = await this.merchantService.suspendMerchant(id);
+    await this.auditService.log({
+      adminId: user.sub,
+      action: 'MERCHANT_SUSPEND',
+      entityType: 'merchant',
+      entityId: id,
+    });
     return { status: 'success', data: merchant };
   }
 
@@ -223,8 +318,145 @@ export class AdminController {
   @ApiResponse({ status: 404, description: 'User not found', type: ErrorResponseDto })
   async deactivateUser(
     @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: { sub: string },
   ): Promise<SuccessResponseDto<unknown>> {
-    const user = await this.adminService.deactivateUser(id, true);
-    return { status: 'success', data: user };
+    const deactivatedUser = await this.adminService.deactivateUser(id, true);
+    await this.auditService.log({
+      adminId: user.sub,
+      action: 'USER_DEACTIVATE',
+      entityType: 'user',
+      entityId: id,
+    });
+    return { status: 'success', data: deactivatedUser };
+  }
+
+  // ---------------------------------------------------------------------------
+  //  Audit Log
+  // ---------------------------------------------------------------------------
+
+  @Get('audit-log')
+  @ApiOperation({ summary: 'Get audit trail (paginated, filterable)' })
+  @ApiQuery({ name: 'page', required: false, example: 1, description: 'Page number' })
+  @ApiQuery({ name: 'limit', required: false, example: 20, description: 'Items per page' })
+  @ApiQuery({ name: 'action', required: false, type: String, description: 'Filter by action (e.g., MERCHANT_APPROVE, MERCHANT_SUSPEND, USER_DEACTIVATE)' })
+  @ApiQuery({ name: 'entityType', required: false, type: String, description: 'Filter by entity type (e.g., merchant, user)' })
+  @ApiQuery({ name: 'entityId', required: false, type: String, description: 'Filter by entity UUID' })
+  @ApiQuery({ name: 'dateFrom', required: false, description: 'Start date (ISO string, inclusive)' })
+  @ApiQuery({ name: 'dateTo', required: false, description: 'End date (ISO string, inclusive)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated audit log entries',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            items: { type: 'array', items: { type: 'object' } },
+            total: { type: 'number' },
+            page: { type: 'number' },
+            limit: { type: 'number' },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 403, description: 'Access denied: Admin role required', type: ErrorResponseDto })
+  async getAuditLog(
+    @Query() filters: AuditFilterDto,
+  ): Promise<SuccessResponseDto<unknown>> {
+    const result = await this.auditService.findAll(
+      {
+        action: filters.action,
+        entityType: filters.entityType,
+        entityId: filters.entityId,
+        dateFrom: filters.dateFrom ? new Date(filters.dateFrom) : undefined,
+        dateTo: filters.dateTo ? new Date(filters.dateTo) : undefined,
+      },
+      filters.page,
+      filters.limit,
+    );
+    return { status: 'success', data: result };
+  }
+
+  // ---------------------------------------------------------------------------
+  //  Support Tickets
+  // ---------------------------------------------------------------------------
+
+  @Get('support-tickets')
+  @ApiOperation({ summary: 'List support tickets (paginated, filterable)' })
+  @ApiQuery({ name: 'page', required: false, example: 1, description: 'Page number' })
+  @ApiQuery({ name: 'limit', required: false, example: 20, description: 'Items per page' })
+  @ApiQuery({ name: 'ticketStatus', required: false, type: Number, description: 'Filter by status (1=OPEN, 2=IN_PROGRESS, 3=RESOLVED, 4=CLOSED)' })
+  @ApiQuery({ name: 'priority', required: false, type: Number, description: 'Filter by priority (1=LOW, 2=MEDIUM, 3=HIGH, 4=URGENT)' })
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Search by subject or description' })
+  @ApiQuery({ name: 'dateFrom', required: false, description: 'Filter by creation date (ISO string, inclusive)' })
+  @ApiQuery({ name: 'dateTo', required: false, description: 'Filter by creation date (ISO string, inclusive)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated support ticket list',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            items: { type: 'array', items: { type: 'object' } },
+            total: { type: 'number' },
+            page: { type: 'number' },
+            limit: { type: 'number' },
+          },
+        },
+      },
+    },
+  })
+  async getSupportTickets(
+    @Query() filters: SupportTicketFilterDto,
+  ): Promise<SuccessResponseDto<unknown>> {
+    const result = await this.supportService.findAll(
+      {
+        ticketStatus: filters.ticketStatus,
+        priority: filters.priority,
+        search: filters.search,
+        dateFrom: filters.dateFrom ? new Date(filters.dateFrom) : undefined,
+        dateTo: filters.dateTo ? new Date(filters.dateTo) : undefined,
+      },
+      filters.page,
+      filters.limit,
+    );
+    return { status: 'success', data: result };
+  }
+
+  @Patch('support-tickets/:id')
+  @ApiOperation({ summary: 'Update a support ticket (status, priority, assignment, notes)' })
+  @ApiResponse({ status: 200, description: 'Ticket updated successfully' })
+  @ApiResponse({ status: 404, description: 'Ticket not found', type: ErrorResponseDto })
+  async updateSupportTicket(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateTicketDto,
+    @CurrentUser() user: { sub: string },
+  ): Promise<SuccessResponseDto<unknown>> {
+    const ticket = await this.supportService.update(id, {
+      ticketStatus: dto.ticketStatus,
+      priority: dto.priority,
+      assignedTo: dto.assignedTo,
+      notes: dto.notes,
+    });
+    // Also log this action in the audit trail
+    await this.auditService.log({
+      adminId: user.sub,
+      action: 'TICKET_UPDATE',
+      entityType: 'support_ticket',
+      entityId: id,
+      details: {
+        ...(dto.ticketStatus !== undefined && { ticketStatus: dto.ticketStatus }),
+        ...(dto.priority !== undefined && { priority: dto.priority }),
+        ...(dto.assignedTo !== undefined && { assignedTo: dto.assignedTo }),
+        ...(dto.notes !== undefined && { notes: dto.notes }),
+      },
+    });
+    return { status: 'success', data: ticket };
   }
 }

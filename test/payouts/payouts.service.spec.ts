@@ -488,4 +488,62 @@ describe('PayoutService', () => {
       expect(payout.notes).toContain('Staff wallet not found');
     });
   });
+
+  describe('escalatePayout', () => {
+    it('should escalate a PENDING payout', async () => {
+      const payout = createMockPayout({
+        payoutStatus: PayoutStatus.PENDING,
+      });
+
+      mockPayoutRepository.findOne.mockResolvedValue(payout);
+
+      const result = await service.escalatePayout('payout-uuid', 'admin-uuid', 'Flagged for review');
+
+      expect(result.payoutStatus).toBe(PayoutStatus.ESCALATED);
+      expect(result.adminId).toBe('admin-uuid');
+      expect(result.notes).toBe('Flagged for review');
+    });
+
+    it('should escalate an APPROVED payout', async () => {
+      const payout = createMockPayout({
+        payoutStatus: PayoutStatus.APPROVED,
+      });
+
+      mockPayoutRepository.findOne.mockResolvedValue(payout);
+
+      const result = await service.escalatePayout('payout-uuid', 'admin-uuid');
+
+      expect(result.payoutStatus).toBe(PayoutStatus.ESCALATED);
+    });
+
+    it('should escalate a FAILED payout', async () => {
+      const payout = createMockPayout({
+        payoutStatus: PayoutStatus.FAILED,
+      });
+
+      mockPayoutRepository.findOne.mockResolvedValue(payout);
+
+      const result = await service.escalatePayout('payout-uuid', 'admin-uuid');
+
+      expect(result.payoutStatus).toBe(PayoutStatus.ESCALATED);
+    });
+
+    it('should throw BadRequestException for COMPLETED payout', async () => {
+      const payout = createMockPayout({
+        payoutStatus: PayoutStatus.COMPLETED,
+      });
+
+      mockPayoutRepository.findOne.mockResolvedValue(payout);
+
+      await expect(service.escalatePayout('payout-uuid', 'admin-uuid'))
+        .rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw NotFoundException when payout does not exist', async () => {
+      mockPayoutRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.escalatePayout('nonexistent', 'admin-uuid'))
+        .rejects.toThrow(NotFoundException);
+    });
+  });
 });

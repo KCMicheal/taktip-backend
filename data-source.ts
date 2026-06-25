@@ -22,6 +22,8 @@ const entities = [
   path.join(__dirname, 'src/tips/entities/*.entity{.ts,.js}'),
   path.join(__dirname, 'src/qrcodes/entities/*.entity{.ts,.js}'),
   path.join(__dirname, 'src/shifts/entities/*.entity{.ts,.js}'),
+  path.join(__dirname, 'src/audit/entities/*.entity{.ts,.js}'),
+  path.join(__dirname, 'src/support/entities/*.entity{.ts,.js}'),
 ];
 
 export const AppDataSource = new DataSource({
