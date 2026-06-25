@@ -1,7 +1,8 @@
-import { IsOptional, IsInt, IsString, MaxLength } from 'class-validator';
+import { IsOptional, IsString, MaxLength, IsIn } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { TicketStatus } from '../enums/ticket-status.enum';
+import { TicketPriority } from '../enums/ticket-priority.enum';
 
 /**
  * Request body for PATCH /admin/support-tickets/:id.
@@ -11,14 +12,14 @@ export class UpdateTicketDto {
   @ApiPropertyOptional({ description: 'New ticket status', example: 2 })
   @IsOptional()
   @Type(() => Number)
-  @IsInt()
+  @IsIn([1, 2, 3, 4])
   ticketStatus?: TicketStatus;
 
   @ApiPropertyOptional({ description: 'New priority level', example: 3 })
   @IsOptional()
   @Type(() => Number)
-  @IsInt()
-  priority?: number;
+  @IsIn([1, 2, 3, 4])
+  priority?: TicketPriority;
 
   @ApiPropertyOptional({ description: 'Admin UUID to assign', example: 'uuid' })
   @IsOptional()

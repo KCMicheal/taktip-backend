@@ -327,14 +327,14 @@ describe('AdminController', () => {
       expect(result.data).toEqual(expectedTicket);
       expect(mockAuditService.log).toHaveBeenCalledWith({
         adminId: 'admin-uuid',
-        action: 'TICKET_UPDATE_STATUS',
+        action: 'TICKET_UPDATE',
         entityType: 'support_ticket',
         entityId: 'ticket-1',
         details: { ticketStatus: 2 },
       });
     });
 
-    it('should not log audit when ticketStatus is not changed', async () => {
+    it('should log audit on notes-only update', async () => {
       const dto: UpdateTicketDto = { notes: 'Just adding a note' };
       const expectedTicket = { id: 'ticket-1', notes: 'Just adding a note' };
       mockSupportService.update.mockResolvedValue(expectedTicket as any);
@@ -342,7 +342,13 @@ describe('AdminController', () => {
       const result = await controller.updateSupportTicket('ticket-1', dto, mockUser);
 
       expect(result.status).toBe('success');
-      expect(mockAuditService.log).not.toHaveBeenCalled();
+      expect(mockAuditService.log).toHaveBeenCalledWith({
+        adminId: 'admin-uuid',
+        action: 'TICKET_UPDATE',
+        entityType: 'support_ticket',
+        entityId: 'ticket-1',
+        details: { notes: 'Just adding a note' },
+      });
     });
   });
 });

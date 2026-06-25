@@ -445,15 +445,18 @@ export class AdminController {
       notes: dto.notes,
     });
     // Also log this action in the audit trail
-    if (dto.ticketStatus !== undefined) {
-      await this.auditService.log({
-        adminId: user.sub,
-        action: 'TICKET_UPDATE_STATUS',
-        entityType: 'support_ticket',
-        entityId: id,
-        details: { ticketStatus: dto.ticketStatus },
-      });
-    }
+    await this.auditService.log({
+      adminId: user.sub,
+      action: 'TICKET_UPDATE',
+      entityType: 'support_ticket',
+      entityId: id,
+      details: {
+        ...(dto.ticketStatus !== undefined && { ticketStatus: dto.ticketStatus }),
+        ...(dto.priority !== undefined && { priority: dto.priority }),
+        ...(dto.assignedTo !== undefined && { assignedTo: dto.assignedTo }),
+        ...(dto.notes !== undefined && { notes: dto.notes }),
+      },
+    });
     return { status: 'success', data: ticket };
   }
 }

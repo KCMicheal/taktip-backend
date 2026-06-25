@@ -8,6 +8,10 @@ import { Payout } from '../payouts/entities/payout.entity';
 import { PayoutStatus } from '../payouts/enums/payout-status.enum';
 import { PaginationService, PaginatedResult } from '../common/pagination';
 
+/** Whitelist of allowed table names for raw analytics queries. */
+const ALLOWED_ANALYTICS_TABLES = ['tips', 'merchants', 'payouts', 'users'] as const;
+type AllowedAnalyticsTable = typeof ALLOWED_ANALYTICS_TABLES[number];
+
 /**
  * Dashboard statistics response.
  */
@@ -241,10 +245,13 @@ export class AdminService {
    * Run a simple COUNT / SUM aggregate for a table over a date range.
    */
   private async rawAggregate(
-    table: string,
+    table: AllowedAnalyticsTable,
     dateFrom: Date,
     dateTo: Date,
   ): Promise<{ count: number; volume: number }> {
+    if (!ALLOWED_ANALYTICS_TABLES.includes(table)) {
+      throw new Error(`Invalid analytics table: ${table}`);
+    }
     const result: { count: string; volume: string }[] =
       await this.merchantRepository.manager.query(
         `SELECT COUNT(*)::text AS count, COALESCE(SUM(amount), 0)::text AS volume
@@ -263,11 +270,14 @@ export class AdminService {
    * `aggregates` are SQL expressions like ['COUNT(*)', 'COALESCE(SUM(amount),0)'].
    */
   private async rawDailyBreakdown(
-    table: string,
+    table: AllowedAnalyticsTable,
     dateFrom: Date,
     dateTo: Date,
     aggregates: string[],
   ): Promise<DailyBreakdown[]> {
+    if (!ALLOWED_ANALYTICS_TABLES.includes(table)) {
+      throw new Error(`Invalid analytics table: ${table}`);
+    }
     const selectExprs = aggregates.map((agg, i) => `${agg} AS val_${i}`);
     const result: { day: string; val_0: string; val_1?: string }[] =
       await this.merchantRepository.manager.query(
