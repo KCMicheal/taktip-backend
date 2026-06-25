@@ -14,6 +14,7 @@ import { User } from '../entities/user.entity';
 import { PasswordReset } from '../entities/password-reset.entity';
 import {
   RegisterMerchantDto,
+  RegisterCustomerDto,
   VerifyOtpDto,
   ResendOtpDto,
   LoginDto,
@@ -24,7 +25,7 @@ import { MailService } from './mail.service';
 import { TokenService, TokenPair } from './token.service';
 import { Role } from '../enums/role.enum';
 import { MerchantService } from '../../merchant/merchant.service';
-import { enumToString } from '../../common/helpers/enum-helper';
+import { CustomerService } from '../../customer/customer.service';
 
 export interface UserResponse {
   sub: string;
@@ -51,6 +52,7 @@ export class AuthService {
     private readonly mailService: MailService,
     private readonly tokenService: TokenService,
     private readonly merchantService: MerchantService,
+    private readonly customerService: CustomerService,
   ) {}
 
   /**
@@ -110,6 +112,69 @@ export class AuthService {
 
     // Send OTP email
     await this.mailService.sendOtpEmail(dto.email, otp, dto.businessName);
+
+    // Dev-mode OTP logging for E2E automation
+    if (process.env.NODE_ENV !== 'production') {
+      this.logger.log(`[DEV] OTP for ${dto.email}: ${otp}`);
+    }
+
+    return {
+      message: 'Registration initiated. Please verify your email with the OTP sent.',
+    };
+  }
+
+  /**
+   * Initiate customer registration
+   * Creates user with hashed password, auto-creates CustomerProfile, and sends OTP
+   */
+  async registerCustomer(dto: RegisterCustomerDto): Promise<{ message: string }> {
+    // Check if email already exists
+    const existingUser = await this.userRepository.findOne({
+      where: { email: dto.email },
+    });
+
+    if (existingUser) {
+      throw new ConflictException('Email already registered');
+    }
+
+    // Check if phone already exists (if provided)
+    if (dto.phoneNumber) {
+      const existingPhone = await this.userRepository.findOne({
+        where: { phone: dto.phoneNumber },
+      });
+      if (existingPhone) {
+        throw new ConflictException('Phone number already registered');
+      }
+    }
+
+    // Generate OTP and hash
+    const otp = this.otpService.generateOtp();
+    const otpHash = await this.otpService.hashOtp(otp);
+    const otpExpiry = this.otpService.getOtpExpiry();
+
+    // Hash password with bcrypt
+    const passwordHash = await bcrypt.hash(dto.password, this.saltRounds);
+
+    // Create user with CUSTOMER role
+    const user = this.userRepository.create({
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      email: dto.email,
+      phone: dto.phoneNumber ?? null,
+      passwordHash,
+      role: Role.CUSTOMER,
+      isEmailVerified: false,
+      otpHash,
+      otpExpiry,
+    });
+
+    await this.userRepository.save(user);
+
+    // Auto-create CustomerProfile (avatar passed if provided)
+    await this.customerService.getOrCreateProfile(user.id, dto.avatar);
+
+    // Send OTP email
+    await this.mailService.sendOtpEmail(dto.email, otp, `${dto.firstName} ${dto.lastName}`);
 
     // Dev-mode OTP logging for E2E automation
     if (process.env.NODE_ENV !== 'production') {

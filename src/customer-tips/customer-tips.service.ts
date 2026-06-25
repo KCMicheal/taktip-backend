@@ -260,7 +260,7 @@ export class CustomerTipsService {
    */
   async searchCustomers(
     query: SearchCustomersQueryDto,
-  ): Promise<{ id: string; displayName: string; avatarUrl: string | null; email: string }[]> {
+  ): Promise<{ id: string; displayName: string; avatar: string | null; email: string }[]> {
     const limit = query.limit ?? 20;
     const searchTerm = `%${query.q}%`;
 
@@ -275,7 +275,7 @@ export class CustomerTipsService {
       .select([
         'cp.id',
         'cp.displayName',
-        'cp.avatarUrl',
+        'cp.avatar',
         'u.email',
         'u.firstName',
         'u.lastName',
@@ -286,7 +286,7 @@ export class CustomerTipsService {
     return results.map((cp) => ({
       id: cp.id,
       displayName: cp.displayName || `${cp.user.firstName || ''} ${cp.user.lastName || ''}`.trim() || 'Unknown',
-      avatarUrl: cp.avatarUrl,
+      avatar: cp.avatar,
       email: cp.user.email,
     }));
   }

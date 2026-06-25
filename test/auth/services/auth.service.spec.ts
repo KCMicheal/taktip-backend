@@ -10,10 +10,12 @@ import { OtpService } from '@/auth/services/otp.service';
 import { MailService } from '@/auth/services/mail.service';
 import { TokenService } from '@/auth/services/token.service';
 import { User } from '@/auth/entities/user.entity';
+import { CustomerProfile } from '@/customer/entities/customer-profile.entity';
 import { PasswordReset } from '@/auth/entities/password-reset.entity';
 import { Role } from '@/auth/enums/role.enum';
 import { Merchant } from '@/merchant/entities/merchant.entity';
 import { MerchantService } from '@/merchant/merchant.service';
+import { CustomerService } from '@/customer/customer.service';
 
 jest.mock('bcrypt');
 jest.mock('jose');
@@ -33,6 +35,7 @@ describe('AuthService', () => {
   let mailService: jest.Mocked<MailService>;
   let tokenService: jest.Mocked<TokenService>;
   let merchantService: jest.Mocked<MerchantService>;
+  let customerService: jest.Mocked<CustomerService>;
 
   const mockUser: Partial<User> = {
     id: 'test-uuid',
@@ -115,6 +118,12 @@ describe('AuthService', () => {
             createMerchant: jest.fn(),
           },
         },
+        {
+          provide: CustomerService,
+          useValue: {
+            getOrCreateProfile: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -125,6 +134,7 @@ describe('AuthService', () => {
     mailService = module.get(MailService);
     tokenService = module.get(TokenService);
     merchantService = module.get(MerchantService);
+    customerService = module.get(CustomerService);
   });
 
   afterEach(() => {
@@ -176,6 +186,106 @@ describe('AuthService', () => {
 
       await expect(authService.registerMerchant(registerDto)).rejects.toThrow(ConflictException);
       await expect(authService.registerMerchant(registerDto)).rejects.toThrow('Email already registered');
+    });
+  });
+
+  describe('registerCustomer', () => {
+    const registerDto = {
+      firstName: 'John',
+      lastName: 'Doe',
+      email: 'customer@example.com',
+      password: 'SecurePass123',
+    };
+
+    it('should successfully register a new customer', async () => {
+      userRepository.findOne.mockResolvedValue(null);
+      otpService.generateOtp.mockReturnValue('123456');
+      otpService.hashOtp.mockResolvedValue('hashedOtp');
+      otpService.getOtpExpiry.mockReturnValue(new Date(Date.now() + 900000));
+      userRepository.create.mockReturnValue(mockUser as User);
+      userRepository.save.mockResolvedValue(mockUser as User);
+      customerService.getOrCreateProfile.mockResolvedValue({
+        id: 'profile-id',
+        userId: mockUser.id,
+        user: mockUser,
+        displayName: null,
+        avatar: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as CustomerProfile);
+      mailService.sendOtpEmail.mockResolvedValue(undefined);
+
+      const result = await authService.registerCustomer(registerDto);
+
+      expect(result.message).toBe('Registration initiated. Please verify your email with the OTP sent.');
+      expect(userRepository.findOne).toHaveBeenCalledWith({ where: { email: registerDto.email } });
+      expect(otpService.generateOtp).toHaveBeenCalled();
+      expect(otpService.hashOtp).toHaveBeenCalledWith('123456');
+      expect(mailService.sendOtpEmail).toHaveBeenCalledWith(
+        registerDto.email,
+        '123456',
+        `${registerDto.firstName} ${registerDto.lastName}`,
+      );
+      // Should create CustomerProfile with user.id and no avatar
+      expect(customerService.getOrCreateProfile).toHaveBeenCalledWith(mockUser.id, undefined);
+      // Should create user with CUSTOMER role
+      expect(userRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ role: Role.CUSTOMER }),
+      );
+    });
+
+    it('should register a customer with optional phoneNumber and avatar', async () => {
+      const dtoWithExtras = {
+        ...registerDto,
+        phoneNumber: '+2348012345678',
+        avatar: 'data:image/png;base64,iVBORw0KGgo...',
+      };
+
+      userRepository.findOne.mockResolvedValue(null);
+      otpService.generateOtp.mockReturnValue('123456');
+      otpService.hashOtp.mockResolvedValue('hashedOtp');
+      otpService.getOtpExpiry.mockReturnValue(new Date(Date.now() + 900000));
+      userRepository.create.mockReturnValue(mockUser as User);
+      userRepository.save.mockResolvedValue(mockUser as User);
+      customerService.getOrCreateProfile.mockResolvedValue({
+        id: 'profile-id',
+        userId: mockUser.id,
+        user: mockUser,
+      } as CustomerProfile);
+      mailService.sendOtpEmail.mockResolvedValue(undefined);
+
+      const result = await authService.registerCustomer(dtoWithExtras);
+
+      expect(result.message).toBe('Registration initiated. Please verify your email with the OTP sent.');
+      // Should pass avatar to getOrCreateProfile
+      expect(customerService.getOrCreateProfile).toHaveBeenCalledWith(mockUser.id, dtoWithExtras.avatar);
+      // Should check phone uniqueness
+      expect(userRepository.findOne).toHaveBeenCalledWith({ where: { phone: dtoWithExtras.phoneNumber } });
+    });
+
+    it('should throw ConflictException if email already exists', async () => {
+      userRepository.findOne.mockResolvedValue(mockUser as User);
+
+      await expect(authService.registerCustomer(registerDto)).rejects.toThrow(ConflictException);
+      await expect(authService.registerCustomer(registerDto)).rejects.toThrow('Email already registered');
+    });
+
+    it('should throw ConflictException if phone already exists', async () => {
+      const dtoWithPhone = { ...registerDto, phoneNumber: '+2348012345678' };
+      // Use mockImplementation to check the arguments and return appropriately
+      userRepository.findOne.mockImplementation((query: { where?: unknown }) => {
+        const qw = query.where as Record<string, unknown>;
+        if ('email' in qw) {
+          return Promise.resolve(null);          // email check → no conflict
+        }
+        if ('phone' in qw) {
+          return Promise.resolve(mockUser as User);  // phone check → conflict!
+        }
+        return Promise.resolve(null);
+      });
+
+      await expect(authService.registerCustomer(dtoWithPhone)).rejects.toThrow(ConflictException);
+      await expect(authService.registerCustomer(dtoWithPhone)).rejects.toThrow('Phone number already registered');
     });
   });
 
