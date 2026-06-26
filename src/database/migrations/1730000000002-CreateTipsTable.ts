@@ -26,7 +26,7 @@ export class CreateTipsTable1730000000002 implements MigrationInterface {
         "message" character varying,
         "rating" integer,
         "source" integer NOT NULL,
-        "tip_status" integer NOT NULL DEFAULT 0,
+        "tip_status" integer NOT NULL DEFAULT 1,
         "qr_code_id" uuid,
         CONSTRAINT "PK_tips" PRIMARY KEY ("id")
       )

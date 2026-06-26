@@ -34,7 +34,7 @@ export class Tip extends BaseEntity {
   @Column({ type: 'int', enum: TipSource })
   source: TipSource;
 
-  @Column({ type: 'int', enum: TipStatus, default: TipStatus.COMPLETED })
+  @Column({ type: 'int', enum: TipStatus, default: TipStatus.COMPLETED, name: 'tip_status' })
   tipStatus: TipStatus;
 
   @Column({ type: 'uuid', nullable: true, name: 'qr_code_id' })

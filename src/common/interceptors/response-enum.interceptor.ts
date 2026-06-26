@@ -48,6 +48,7 @@ const RESPONSE_ENUM_FIELDS: Record<string, Record<string, unknown>[]> = {
   shiftStatus: [ShiftStatus],
   shiftStaffStatus: [ShiftStaffStatus],
   tipStatus: [TipStatus],
+  source: [TipSource],
   tipSource: [TipSource],
   fundingSource: [C2cTipFundingSource],
   senderType: [C2cTipSenderType],
@@ -89,6 +90,11 @@ function transformPayload(payload: unknown, visited = new Set<unknown>()): unkno
   if (visited.has(payload)) return payload;
   visited.add(payload);
 
+  // Preserve Date objects — they serialise to ISO strings via JSON.stringify
+  if (payload instanceof Date) {
+    return payload;
+  }
+
   if (Array.isArray(payload)) {
     return payload.map((item) => transformPayload(item, visited));
   }
@@ -98,7 +104,7 @@ function transformPayload(payload: unknown, visited = new Set<unknown>()): unkno
     for (const [key, val] of Object.entries(payload as Record<string, unknown>)) {
       // Step 1 — convert the value if it's a known enum field
       transformed[key] = valueToString(val, key);
-      // Step 2 — recurse into sub-objects / arrays
+      // Step 2 — recurse into sub-objects / arrays (but not Dates, already handled above)
       if (typeof transformed[key] === 'object' && transformed[key] !== null) {
         transformed[key] = transformPayload(transformed[key], visited);
       }

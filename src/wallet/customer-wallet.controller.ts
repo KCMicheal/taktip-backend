@@ -7,6 +7,7 @@ import {
   UseGuards,
   BadRequestException,
   NotFoundException,
+  Inject,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -32,6 +33,10 @@ import { Tip } from '../tips/entities/tip.entity';
 import { StaffProfile } from '../staff/entities/staff-profile.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { User } from '../auth/entities/user.entity';
+import { Payment } from '../payments/entities/payment.entity';
+import { PAYMENT_PROVIDER } from '../payments/providers/providers.constants';
+import { PaymentProvider } from '../payments/providers/interfaces/payment-provider.interface';
 
 /**
  * Generic success response wrapper
@@ -53,6 +58,12 @@ export class CustomerWalletController {
     private readonly tipsService: TipsService,
     @InjectRepository(StaffProfile)
     private readonly staffProfileRepository: Repository<StaffProfile>,
+    @Inject(PAYMENT_PROVIDER)
+    private readonly paymentProvider: PaymentProvider,
+    @InjectRepository(Payment)
+    private readonly paymentRepository: Repository<Payment>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
   ) {}
 
   /**
@@ -97,10 +108,10 @@ export class CustomerWalletController {
   }
 
   @Post('deposit')
-  @ApiOperation({ summary: "Deposit funds to the customer's own wallet (creates wallet if none exists)" })
+  @ApiOperation({ summary: 'Initiate a wallet deposit via Paystack (returns authorization URL)' })
   @ApiResponse({
     status: 201,
-    description: 'Deposit completed',
+    description: 'Paystack checkout URL',
     schema: {
       type: 'object',
       properties: {
@@ -108,45 +119,101 @@ export class CustomerWalletController {
         data: {
           type: 'object',
           properties: {
-            wallet: {
-              type: 'object',
-              properties: {
-                id: { type: 'string', format: 'uuid' },
-                balanceAvailable: { type: 'number', example: 10000 },
-                currency: { type: 'string', example: 'NGN' },
-              },
-            },
-            transaction: {
-              type: 'object',
-              properties: {
-                id: { type: 'string', format: 'uuid' },
-                type: { type: 'number', example: 1 },
-                amount: { type: 'number', example: 5000 },
-                fee: { type: 'number', example: 0 },
-                reference: { type: 'string', example: 'DEP-1712345678-abc' },
-                description: { type: 'string', example: 'Customer deposit' },
-                transactionStatus: { type: 'number', example: 2 },
-                createdAt: { type: 'string', format: 'date-time' },
-              },
-            },
+            authorizationUrl: { type: 'string', example: 'https://checkout.paystack.com/abc123' },
+            reference: { type: 'string', example: 'TXT-1712345678-abc' },
           },
         },
       },
     },
   })
-  @ApiResponse({ status: 400, description: 'Invalid deposit amount' })
+  @ApiResponse({ status: 400, description: 'Invalid deposit amount or customer email not found' })
   async deposit(
     @CurrentUser() user: { sub: string; role: Role },
     @Body() dto: CustomerDepositDto,
-  ): Promise<SuccessResponseDto<TransactionResponseDto>> {
+  ): Promise<SuccessResponseDto<{ authorizationUrl: string; reference: string }>> {
     const { wallet } = await this.resolveCustomerWallet(user.sub);
-    const data = await this.walletService.deposit(user, {
-      walletId: wallet.id,
-      amount: dto.amount,
-      reference: dto.reference,
-      description: dto.description,
+
+    // Resolve customer email from the User entity
+    const customerProfile = await this.customerService.getOrCreateProfile(user.sub);
+    const customerUser = await this.userRepository.findOne({
+      where: { id: customerProfile.userId },
     });
-    return { status: 'success', data };
+    if (!customerUser?.email) {
+      throw new BadRequestException('Customer email not found — cannot initiate deposit');
+    }
+
+    // Initialize Paystack transaction with deposit metadata
+    const result = await this.paymentProvider.initializeTransaction({
+      email: customerUser.email,
+      amount: dto.amount,
+      metadata: {
+        walletId: wallet.id,
+        deposit: true,
+      },
+    });
+
+    return {
+      status: 'success',
+      data: {
+        authorizationUrl: result.authorizationUrl,
+        reference: result.reference,
+      },
+    };
+  }
+
+  @Get('deposit/status')
+  @ApiOperation({ summary: 'Poll deposit payment status by reference' })
+  @ApiQuery({ name: 'reference', required: true, type: String, description: 'Paystack transaction reference' })
+  @ApiResponse({
+    status: 200,
+    description: 'Deposit payment status',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            paymentStatus: { type: 'number', example: 1 },
+            amount: { type: 'number', example: 5000 },
+            reference: { type: 'string', example: 'TXT-1712345678-abc' },
+          },
+        },
+      },
+    },
+  })
+  async depositStatus(
+    @CurrentUser() user: { sub: string; role: Role },
+    @Query('reference') reference: string,
+  ): Promise<SuccessResponseDto<{
+    paymentStatus: number;
+    amount: number;
+    reference: string;
+  }>> {
+    if (!reference) {
+      throw new BadRequestException('Payment reference is required');
+    }
+
+    const payment = await this.paymentRepository.findOne({ where: { reference } });
+    if (!payment) {
+      throw new NotFoundException('Payment not found for the given reference');
+    }
+
+    // Verify the payment belongs to this customer's wallet
+    const metadata = payment.metadata as Record<string, unknown> | null;
+    const { wallet } = await this.resolveCustomerWallet(user.sub);
+    if (metadata?.walletId !== wallet.id) {
+      throw new NotFoundException('Payment not found for your wallet');
+    }
+
+    return {
+      status: 'success',
+      data: {
+        paymentStatus: payment.paymentStatus,
+        amount: payment.amount,
+        reference: payment.reference,
+      },
+    };
   }
 
   @Post('tip')

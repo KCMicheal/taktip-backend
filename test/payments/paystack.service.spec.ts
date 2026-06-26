@@ -11,6 +11,7 @@ import { PaymentEvent } from '../../src/payments/entities/payment-event.entity';
 import { Tip } from '../../src/tips/entities/tip.entity';
 import { TipStatus } from '../../src/tips/enums/tip-status.enum';
 import { Wallet } from '../../src/wallet/entities/wallet.entity';
+import { Transaction } from '../../src/wallet/entities/transaction.entity';
 import { CustomerProfile } from '../../src/customer/entities/customer-profile.entity';
 import { User } from '../../src/auth/entities/user.entity';
 import { MailService } from '../../src/auth/services/mail.service';
@@ -57,6 +58,11 @@ describe('PaystackProvider', () => {
     },
   };
 
+  const mockTransactionRepository = {
+    create: jest.fn(),
+    save: jest.fn(),
+  };
+
   const mockCustomerProfileRepository = {
     findOne: jest.fn(),
   };
@@ -77,7 +83,6 @@ describe('PaystackProvider', () => {
   const mockConfigService = {
     get: jest.fn((key: string, defaultValue?: string) => {
       if (key === 'PAYSTACK_SECRET_KEY') return 'sk_test_mocked_secret';
-      if (key === 'PAYSTACK_WEBHOOK_SECRET') return 'whsec_mocked_secret';
       if (key === 'APP_URL') return 'https://app.taktip.com';
       return defaultValue;
     }),
@@ -140,6 +145,10 @@ describe('PaystackProvider', () => {
         {
           provide: getRepositoryToken(Wallet),
           useValue: mockWalletRepository,
+        },
+        {
+          provide: getRepositoryToken(Transaction),
+          useValue: mockTransactionRepository,
         },
         {
           provide: getRepositoryToken(PaymentEvent),
@@ -458,7 +467,6 @@ describe('PaystackProvider', () => {
     beforeEach(() => {
       mockConfigService.get.mockImplementation((key: string, defaultValue?: string) => {
         if (key === 'PAYSTACK_SECRET_KEY') return 'sk_test_mocked_secret';
-        if (key === 'PAYSTACK_WEBHOOK_SECRET') return 'whsec_mocked_secret';
         if (key === 'APP_URL') return 'https://app.taktip.com';
         return defaultValue;
       });
@@ -466,7 +474,7 @@ describe('PaystackProvider', () => {
 
     it('should return true for a valid SHA512 signature', () => {
       const body = JSON.stringify({ event: 'charge.success', data: { reference: 'TXT-ref' } });
-      const secret = 'whsec_mocked_secret';
+      const secret = 'sk_test_mocked_secret';
 
       // Generate a valid HMAC-SHA512 hash
       const expectedHash = createHmac('sha512', secret)
@@ -486,10 +494,9 @@ describe('PaystackProvider', () => {
       expect(result).toBe(false);
     });
 
-    it('should return false when webhook secret is not configured', () => {
+    it('should return false when secret key is not configured', () => {
       mockConfigService.get.mockImplementation((key: string) => {
-        if (key === 'PAYSTACK_WEBHOOK_SECRET') return '';
-        if (key === 'PAYSTACK_SECRET_KEY') return 'sk_test_mocked_secret';
+        if (key === 'PAYSTACK_SECRET_KEY') return '';
         return undefined;
       });
 
@@ -502,7 +509,7 @@ describe('PaystackProvider', () => {
 
     it('should use SHA512 algorithm (reject SHA256)', () => {
       const body = JSON.stringify({ event: 'charge.success', data: { reference: 'TXT-ref' } });
-      const secret = 'whsec_mocked_secret';
+      const secret = 'sk_test_mocked_secret';
 
       // SHA512 hash
       const sha512Hash = createHmac('sha512', secret)

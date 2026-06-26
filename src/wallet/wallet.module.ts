@@ -12,6 +12,7 @@ import { CustomerModule } from '../customer/customer.module';
 import { TipsModule } from '../tips/tips.module';
 import { PayoutsModule } from '../payouts/payouts.module';
 import { MerchantModule } from '../merchant/merchant.module';
+import { PaymentsModule } from '../payments/payments.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { MerchantModule } from '../merchant/merchant.module';
     TipsModule,
     PayoutsModule,
     forwardRef(() => MerchantModule),
+    forwardRef(() => PaymentsModule),
   ],
   controllers: [
     WalletController,

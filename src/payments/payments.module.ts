@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
@@ -13,6 +13,7 @@ import { PaystackProvider } from './providers/paystack/paystack.provider';
 import { PaymentEventService } from './payment-event.service';
 import { Tip } from '../tips/entities/tip.entity';
 import { Wallet } from '../wallet/entities/wallet.entity';
+import { Transaction } from '../wallet/entities/transaction.entity';
 import { StaffProfile } from '../staff/entities/staff-profile.entity';
 import { CustomerProfile } from '../customer/entities/customer-profile.entity';
 import { User } from '../auth/entities/user.entity';
@@ -24,7 +25,7 @@ import { MailService } from '../auth/services/mail.service';
     ConfigModule,
     QrCodesModule,
     TipsModule,
-    WalletModule,
+    forwardRef(() => WalletModule),
   ],
   controllers: [PaymentsController],
   providers: [
@@ -36,6 +37,7 @@ import { MailService } from '../auth/services/mail.service';
         paymentRepo: Repository<Payment>,
         tipRepo: Repository<Tip>,
         walletRepo: Repository<Wallet>,
+        transactionRepo: Repository<Transaction>,
         customerProfileRepo: Repository<CustomerProfile>,
         userRepo: Repository<User>,
         paymentEventService: PaymentEventService,
@@ -48,6 +50,7 @@ import { MailService } from '../auth/services/mail.service';
               paymentRepo,
               tipRepo,
               walletRepo,
+              transactionRepo,
               customerProfileRepo,
               userRepo,
               configService,
@@ -66,6 +69,7 @@ import { MailService } from '../auth/services/mail.service';
         getRepositoryToken(Payment),
         getRepositoryToken(Tip),
         getRepositoryToken(Wallet),
+        getRepositoryToken(Transaction),
         getRepositoryToken(CustomerProfile),
         getRepositoryToken(User),
         PaymentEventService,
