@@ -69,6 +69,8 @@ export class PaystackProvider implements PaymentProvider {
   ): Promise<InitializeTransactionResult> {
     const reference = params.reference || this.generateReference();
     const appUrl = this.configService.get<string>('APP_URL', 'https://app.taktip.com');
+    const callbackUrl =
+      params.callbackUrl ?? `${appUrl}/tip/callback`;
     const amountInKobo = Math.round(params.amount * 100);
 
     // Log the intent (before the API call)
@@ -81,7 +83,7 @@ export class PaystackProvider implements PaymentProvider {
         amount: amountInKobo,
         reference,
         metadata: params.metadata || {},
-        callback_url: `${appUrl}/tip/callback`,
+        callback_url: callbackUrl,
       });
 
       this.logger.log(`Paystack transaction initialized: ${reference}`);
@@ -328,7 +330,7 @@ export class PaystackProvider implements PaymentProvider {
     }
 
     // ── Wallet deposit: credit balance_available directly ──
-    const metadata = payment.metadata as Record<string, unknown> | null;
+    const metadata = payment.metadata;
     if (metadata?.deposit === true && metadata?.walletId) {
       const walletId = metadata.walletId as string;
       const amount = payment.amount;
