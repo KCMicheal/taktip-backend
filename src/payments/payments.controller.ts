@@ -341,7 +341,7 @@ export class PaymentsController {
         where: { id: dto.qrCodeId, isActive: true },
       });
 
-      if (!qrCode || !qrCode.staffProfileId) {
+      if (!qrCode || !qrCode.staffProfileId || !qrCode.merchantId) {
         return { status: 'error', data: null };
       }
 

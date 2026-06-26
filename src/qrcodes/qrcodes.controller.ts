@@ -29,6 +29,7 @@ import { GenerateQrCodeDto } from './dto/generate-qrcode.dto';
 import { ErrorResponseDto } from '../auth/dto/response.dto';
 import { Merchant } from '../merchant/entities/merchant.entity';
 import { StaffProfile } from '../staff/entities/staff-profile.entity';
+import { CustomerProfile } from '../customer/entities/customer-profile.entity';
 
 @ApiTags('qr-codes')
 @Controller()
@@ -39,6 +40,8 @@ export class QrCodesController {
     private readonly merchantRepository: Repository<Merchant>,
     @InjectRepository(StaffProfile)
     private readonly staffProfileRepository: Repository<StaffProfile>,
+    @InjectRepository(CustomerProfile)
+    private readonly customerProfileRepository: Repository<CustomerProfile>,
   ) {}
 
   /**
@@ -52,6 +55,19 @@ export class QrCodesController {
       throw new NotFoundException('No merchant found for this user');
     }
     return merchant.id;
+  }
+
+  /**
+   * Resolve the customer profile ID from the authenticated user.
+   */
+  private async resolveCustomerProfileId(userId: string): Promise<string> {
+    const profile = await this.customerProfileRepository.findOne({
+      where: { userId },
+    });
+    if (!profile) {
+      throw new NotFoundException('Customer profile not found. Please register as a customer first.');
+    }
+    return profile.id;
   }
 
   @Post('merchant/qrcodes')
@@ -224,6 +240,116 @@ export class QrCodesController {
     return { status: 'success', message: 'QR code deactivated' };
   }
 
+  // ──────────────────────────────────────────────
+  //  Customer QR Code Endpoints
+  // ──────────────────────────────────────────────
+
+  @Post('customer/qr-code')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.CUSTOMER)
+  @ApiOperation({ summary: 'Ensure a QR code exists for the authenticated customer (idempotent)' })
+  @ApiResponse({
+    status: 201,
+    description: 'QR code generated or existing one returned',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            qrCode: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', format: 'uuid' },
+                shortCode: { type: 'string', example: 'a1b2c3d4' },
+                isActive: { type: 'boolean', example: true },
+                customerProfileId: { type: 'string', format: 'uuid' },
+              },
+            },
+            qrDataUrl: { type: 'string', example: 'data:image/png;base64,iVBORw0KGgo...' },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 403, description: 'Access denied: Customer role required', type: ErrorResponseDto })
+  async generateCustomerQrCode(@CurrentUser() user: { sub: string }) {
+    const customerProfileId = await this.resolveCustomerProfileId(user.sub);
+    const result = await this.qrCodesService.ensureCustomerQrCode(customerProfileId);
+    return { status: 'success', data: result };
+  }
+
+  @Get('customer/qr-code')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.CUSTOMER)
+  @ApiOperation({ summary: 'Get the authenticated customer\'s QR code' })
+  @ApiResponse({
+    status: 200,
+    description: 'Customer QR code details',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            shortCode: { type: 'string', example: 'a1b2c3d4' },
+            isActive: { type: 'boolean' },
+            customerProfileId: { type: 'string', format: 'uuid' },
+            url: { type: 'string', example: 'https://app.taktip.com/tip/a1b2c3d4' },
+            createdAt: { type: 'string', format: 'date-time' },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'No QR code found for this customer. Generate one first.', type: ErrorResponseDto })
+  async getCustomerQrCode(@CurrentUser() user: { sub: string }) {
+    const customerProfileId = await this.resolveCustomerProfileId(user.sub);
+    const qrCode = await this.qrCodesService.findByCustomerProfile(customerProfileId);
+    if (!qrCode) {
+      throw new NotFoundException('No QR code found for this customer. Generate one first.');
+    }
+    return { status: 'success', data: qrCode };
+  }
+
+  @Delete('customer/qr-code')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.CUSTOMER)
+  @ApiOperation({ summary: 'Deactivate the authenticated customer\'s QR code' })
+  @ApiResponse({
+    status: 200,
+    description: 'QR code deactivated',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        message: { type: 'string', example: 'QR code deactivated' },
+      },
+    },
+  })
+  @ApiResponse({ status: 403, description: 'Access denied: Customer role required', type: ErrorResponseDto })
+  @ApiResponse({ status: 404, description: 'QR code not found', type: ErrorResponseDto })
+  async deactivateCustomerQrCode(@CurrentUser() user: { sub: string }) {
+    const customerProfileId = await this.resolveCustomerProfileId(user.sub);
+    // Find the customer's QR first
+    const qrCode = await this.qrCodesService.findByCustomerProfile(customerProfileId);
+    if (!qrCode) {
+      throw new NotFoundException('No QR code found for this customer. Generate one first.');
+    }
+    await this.qrCodesService.deactivateForCustomer(qrCode.id, customerProfileId);
+    return { status: 'success', message: 'QR code deactivated' };
+  }
+
+  // ──────────────────────────────────────────────
+  //  Public QR Code Resolution
+  // ──────────────────────────────────────────────
+
   @Get('tip/:qrCode')
   @Public()
   @ApiOperation({ summary: 'Resolve a QR code short code to enriched tip page data' })
@@ -239,11 +365,12 @@ export class QrCodesController {
           type: 'object',
           properties: {
             qrCodeId: { type: 'string', format: 'uuid' },
-            merchantId: { type: 'string', format: 'uuid' },
+            merchantId: { type: 'string', format: 'uuid', nullable: true },
             staffProfileId: { type: 'string', format: 'uuid', nullable: true },
+            customerProfileId: { type: 'string', format: 'uuid', nullable: true },
             ownerName: { type: 'string', example: "Joe's Restaurant" },
             ownerPhoto: { type: 'string', nullable: true },
-            ownerType: { type: 'string', enum: ['merchant', 'staff'] },
+            ownerType: { type: 'string', enum: ['merchant', 'staff', 'customer'] },
           },
         },
       },

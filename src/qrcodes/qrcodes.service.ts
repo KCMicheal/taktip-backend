@@ -12,6 +12,7 @@ import * as QRCode from 'qrcode';
 import { QrCode } from './entities/qrcode.entity';
 import { Merchant } from '../merchant/entities/merchant.entity';
 import { StaffProfile } from '../staff/entities/staff-profile.entity';
+import { CustomerProfile } from '../customer/entities/customer-profile.entity';
 import { GenerateQrCodeDto } from './dto/generate-qrcode.dto';
 
 @Injectable()
@@ -25,6 +26,8 @@ export class QrCodesService {
     private readonly merchantRepository: Repository<Merchant>,
     @InjectRepository(StaffProfile)
     private readonly staffProfileRepository: Repository<StaffProfile>,
+    @InjectRepository(CustomerProfile)
+    private readonly customerProfileRepository: Repository<CustomerProfile>,
     private readonly configService: ConfigService,
   ) {}
 
@@ -124,6 +127,65 @@ export class QrCodesService {
   }
 
   /**
+   * Ensure a QR code exists for a customer profile.
+   * Idempotent — returns the existing QR if one already exists for this customerProfileId.
+   * Also regenerates the QR image data URL for immediate display.
+   */
+  async ensureCustomerQrCode(customerProfileId: string): Promise<{ qrCode: QrCode; qrDataUrl: string }> {
+    const existing = await this.qrCodeRepository.findOne({
+      where: { customerProfileId },
+    });
+    if (existing) {
+      // If the existing QR is inactive (deactivated), reactivate it
+      if (!existing.isActive) {
+        await this.qrCodeRepository.update(existing.id, { isActive: true });
+        existing.isActive = true;
+        this.logger.log(`Reactivated existing QR code for customer profile ${customerProfileId}`);
+      }
+      this.logger.log(`QR code already exists for customer profile ${customerProfileId}, returning existing`);
+      const qrDataUrl = await QRCode.toDataURL(existing.url, {
+        width: 400,
+        margin: 2,
+        color: { dark: '#000000', light: '#ffffff' },
+      });
+      return { qrCode: existing, qrDataUrl };
+    }
+
+    const shortCode = await this.generateShortCode();
+    const appUrl = this.configService.get<string>('APP_URL', 'https://app.taktip.com');
+    const url = `${appUrl}/tip/${shortCode}`;
+
+    const qrDataUrl = await QRCode.toDataURL(url, {
+      width: 400,
+      margin: 2,
+      color: { dark: '#000000', light: '#ffffff' },
+    });
+
+    const qrCode = this.qrCodeRepository.create({
+      customerProfileId,
+      shortCode,
+      url,
+      isActive: true,
+    } as Partial<QrCode>);
+
+    const saved = await this.qrCodeRepository.save(qrCode);
+
+    this.logger.log(`QR code auto-generated for customer profile ${customerProfileId}`);
+
+    return { qrCode: saved, qrDataUrl };
+  }
+
+  /**
+   * Find the QR code linked to a customer profile.
+   * Returns null if no QR has been generated yet.
+   */
+  async findByCustomerProfile(customerProfileId: string): Promise<QrCode | null> {
+    return this.qrCodeRepository.findOne({
+      where: { customerProfileId },
+    });
+  }
+
+  /**
    * Look up a QR code by its short code. Used by the public tip resolution endpoint.
    */
   async findByShortCode(shortCode: string): Promise<QrCode | null> {
@@ -138,20 +200,34 @@ export class QrCodesService {
    */
   async resolveByShortCode(shortCode: string): Promise<{
     qrCodeId: string;
-    merchantId: string;
+    merchantId: string | null;
     staffProfileId: string | null;
+    customerProfileId: string | null;
     ownerName: string;
     ownerPhoto: string | null;
-    ownerType: 'merchant' | 'staff';
+    ownerType: 'merchant' | 'staff' | 'customer';
   } | null> {
     const qrCode = await this.findByShortCode(shortCode);
     if (!qrCode) return null;
 
     let ownerName: string;
     let ownerPhoto: string | null = null;
-    let ownerType: 'merchant' | 'staff';
+    let ownerType: 'merchant' | 'staff' | 'customer';
 
-    if (qrCode.staffProfileId) {
+    if (qrCode.customerProfileId) {
+      // Customer QR code — look up customer profile
+      ownerType = 'customer';
+      const customerProfile = await this.customerProfileRepository.findOne({
+        where: { id: qrCode.customerProfileId },
+        relations: ['user'],
+      });
+      if (customerProfile) {
+        ownerName = customerProfile.displayName || customerProfile.user?.firstName || 'Customer';
+        ownerPhoto = customerProfile.avatar || null;
+      } else {
+        ownerName = 'Customer';
+      }
+    } else if (qrCode.staffProfileId) {
       // Staff QR code — look up staff profile
       ownerType = 'staff';
       const staffProfile = await this.staffProfileRepository.findOne({
@@ -164,7 +240,7 @@ export class QrCodesService {
       } else {
         ownerName = 'Staff';
       }
-    } else {
+    } else if (qrCode.merchantId) {
       // Merchant QR code — look up merchant
       ownerType = 'merchant';
       const merchant = await this.merchantRepository.findOne({
@@ -172,12 +248,18 @@ export class QrCodesService {
       });
       ownerName = merchant?.name || 'Merchant';
       ownerPhoto = merchant?.logoUrl || null;
+    } else {
+      // Fallback — no owner type could be determined
+      ownerType = 'merchant';
+      ownerName = 'Merchant';
+      ownerPhoto = null;
     }
 
     return {
       qrCodeId: qrCode.id,
       merchantId: qrCode.merchantId,
       staffProfileId: qrCode.staffProfileId,
+      customerProfileId: qrCode.customerProfileId,
       ownerName,
       ownerPhoto,
       ownerType,
@@ -247,5 +329,26 @@ export class QrCodesService {
     await this.qrCodeRepository.update(id, { isActive: false });
 
     this.logger.log(`QR code ${id} deactivated by merchant ${merchantId}`);
+  }
+
+  /**
+   * Deactivate a QR code by ID. Verifies the customer owns the QR code.
+   */
+  async deactivateForCustomer(id: string, customerProfileId: string): Promise<void> {
+    const qrCode = await this.qrCodeRepository.findOne({
+      where: { id },
+    });
+
+    if (!qrCode) {
+      throw new NotFoundException('QR code not found');
+    }
+
+    if (qrCode.customerProfileId !== customerProfileId) {
+      throw new NotFoundException('QR code not found');
+    }
+
+    await this.qrCodeRepository.update(id, { isActive: false });
+
+    this.logger.log(`QR code ${id} deactivated by customer profile ${customerProfileId}`);
   }
 }

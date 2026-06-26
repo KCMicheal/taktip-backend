@@ -263,17 +263,88 @@ async generateUniqueShortCode(businessName: string): Promise<string> {
 
 ---
 
-## 9. Pre-Commit Checklist
+## 9. Pre-Commit & Pre-Push Checklist
 
-Before pushing any code, verify:
+Before committing and pushing any code, verify:
+
+### Unit & Integration Tests
 - [ ] `pnpm run lint` passes
 - [ ] `pnpm run typecheck` passes  
-- [ ] `pnpm run test` passes (all tests)
+- [ ] `pnpm run test` passes (all relevant test suites)
+
+### Live Endpoint Verification
+After unit tests pass, **all changed/new endpoints MUST be tested against the running local dev server**:
+- [ ] Local dev server is running (`node dist/src/main.js` or `pnpm run start:dev`)
+- [ ] **All related endpoints are exercised with curl** and the responses validated (status codes, response body shape, edge cases)
+  - For new endpoints: exercise success path, validation errors (400), auth/role enforcement (401/403), 404 cases
+  - For modified endpoints: verify old behavior is preserved AND new behavior works
+- [ ] The verification results are captured in a test script or documented inline to make re-verification easy after DB resets
+- [ ] Test users are created fresh as needed (DB is ephemeral — Docker containers lose data on recreate)
+- [ ] All 8/8 (or equivalent) endpoint checks pass before push
+
+### Code Quality
 - [ ] No hardcoded secrets or credentials
 - [ ] New entities added to `data-source.ts` entities array
 - [ ] Ownership checks implemented for protected endpoints
 - [ ] Numeric enum validation uses `typeof === 'number'`
 - [ ] Migration file created/updated for every entity schema change
+
+---
+
+## 10. Local Test Users & Credentials
+
+### Important: Ephemeral Database
+The local Postgres database runs in Docker. When the container is recreated (e.g., `docker compose up -d` with a new container), **all data is lost**. Test users must be recreated each time.
+
+### Registration Flow for New Test Users
+```bash
+# 1. Register via API
+curl -X POST http://localhost:3001/api/v1/auth/register/customer \
+  -H "Content-Type: application/json" \
+  -d '{"email":"customer.test@example.com","password":"TestPass123!","firstName":"Test","lastName":"Customer"}'
+
+# 2. Retrieve OTP from server logs
+grep "OTP for customer.test" /tmp/server.log
+# Expected: [DEV] OTP for customer.test@example.com: XXXXXX
+
+# 3. Verify email
+curl -X POST http://localhost:3001/api/v1/auth/verify-otp \
+  -H "Content-Type: application/json" \
+  -d '{"email":"customer.test@example.com","otp":"XXXXXX"}'
+
+# 4. Login to get JWT
+curl -s -X POST http://localhost:3001/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"identifier":"customer.test@example.com","password":"TestPass123!"}'
+```
+
+### Currently Used Test Users (will need re-creation after DB reset)
+
+**Customer** (for C2C QR code / customer endpoints)
+| Field | Value |
+|-------|-------|
+| Email | `customer.test@example.com` |
+| Password | `TestPass123!` |
+| Login identifier field | `identifier` (not `email`) |
+| Role | CUSTOMER (1) |
+| Customer Profile ID | Auto-generated (check DB or POST response) |
+| Auth header | `Authorization: Bearer <jwt>` |
+
+**Merchant** (for merchant endpoints — register as needed)
+```bash
+# Register merchant
+curl -X POST http://localhost:3001/api/v1/auth/register/merchant \
+  -H "Content-Type: application/json" \
+  -d '{"email":"merchant.test@example.com","password":"TestPass123!","businessName":"Test Merchant"}'
+# Then retrieve OTP from logs, verify, and login with identifier field.
+```
+
+### Notes
+- Login endpoint uses `identifier` field (not `email`), accepts both email and phone.
+- The OTP is 6 digits (each 0-7), logged to console in dev mode.
+- Tokens expire after 30 minutes (`expiresIn: 1800` seconds).
+- Customer profiles are auto-created on registration.
+- The server log file is at `/tmp/server.log` when started via `nohup node dist/src/main.js > /tmp/server.log 2>&1 &`.
 
 ---
 
@@ -302,5 +373,5 @@ src/module/
 
 ---
 
-*Last Updated: 2026-05-31*
-*Version: 2.1 — Phase 5 completion, Staff partial status, gap analysis added*
+*Last Updated: 2026-06-26*
+*Version: 3.0 — Pre-commit live endpoint testing mandate + test user credentials documented*
