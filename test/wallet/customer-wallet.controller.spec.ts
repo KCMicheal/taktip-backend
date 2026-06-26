@@ -9,7 +9,7 @@ import { TipsService } from '../../src/tips/tips.service';
 import { StaffProfile } from '../../src/staff/entities/staff-profile.entity';
 import { User } from '../../src/auth/entities/user.entity';
 import { Payment } from '../../src/payments/entities/payment.entity';
-
+import { ConfigService } from '@nestjs/config';
 import { PAYMENT_PROVIDER } from '../../src/payments/providers/providers.constants';
 import { Role } from '../../src/auth/enums/role.enum';
 
@@ -55,6 +55,9 @@ describe('CustomerWalletController', () => {
     findOne: jest.fn(),
   };
 
+  const mockConfigService = {
+    get: jest.fn((key: string, defaultValue: string) => defaultValue),
+  };
 
   const mockJwtService = {
     verifyAsync: jest.fn().mockResolvedValue({ sub: 'user-uuid', role: Role.CUSTOMER }),
@@ -216,7 +219,7 @@ describe('CustomerWalletController', () => {
       expect(mockPaymentProvider.initializeTransaction).toHaveBeenCalledWith({
         email: 'user@example.com',
         amount: 1000,
-
+        callbackUrl: 'https://app.taktip.com/wallet/deposit/callback',
         metadata: {
           walletId: 'wallet-uuid',
           deposit: true,

@@ -330,7 +330,7 @@ export class PaystackProvider implements PaymentProvider {
     }
 
     // ── Wallet deposit: credit balance_available directly ──
-    const metadata = payment.metadata as Record<string, unknown> | null;
+    const metadata = payment.metadata;
     if (metadata?.deposit === true && metadata?.walletId) {
       const walletId = metadata.walletId as string;
       const amount = payment.amount;
