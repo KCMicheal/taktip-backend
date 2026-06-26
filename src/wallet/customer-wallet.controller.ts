@@ -67,7 +67,7 @@ export class CustomerWalletController {
     private readonly paymentRepository: Repository<Payment>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
-    private readonly configService: ConfigService,
+
   ) {}
 
   /**
@@ -146,15 +146,12 @@ export class CustomerWalletController {
       throw new BadRequestException('Customer email not found — cannot initiate deposit');
     }
 
-    // Build the callback URL from APP_URL (env-aware)
-    const appUrl = this.configService.get<string>('APP_URL', 'https://app.taktip.com');
-    const callbackUrl = `${appUrl}/wallet/deposit/callback`;
 
     // Initialize Paystack transaction with deposit metadata
     const result = await this.paymentProvider.initializeTransaction({
       email: customerUser.email,
       amount: dto.amount,
-      callbackUrl,
+
       metadata: {
         walletId: wallet.id,
         deposit: true,
@@ -209,7 +206,7 @@ export class CustomerWalletController {
     }
 
     // Verify the payment belongs to this customer's wallet
-    const metadata = payment.metadata;
+    const metadata = payment.metadata as Record<string, unknown> | null;
     const { wallet } = await this.resolveCustomerWallet(user.sub);
     if (metadata?.walletId !== wallet.id) {
       throw new NotFoundException('Payment not found for your wallet');
