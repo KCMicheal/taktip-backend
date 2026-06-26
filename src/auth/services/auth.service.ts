@@ -26,6 +26,7 @@ import { TokenService, TokenPair } from './token.service';
 import { Role } from '../enums/role.enum';
 import { MerchantService } from '../../merchant/merchant.service';
 import { CustomerService } from '../../customer/customer.service';
+import { StaffProfile } from '../../staff/entities/staff-profile.entity';
 
 export interface UserResponse {
   sub: string;
@@ -48,12 +49,60 @@ export class AuthService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(PasswordReset)
     private readonly passwordResetRepository: Repository<PasswordReset>,
+    @InjectRepository(StaffProfile)
+    private readonly staffProfileRepository: Repository<StaffProfile>,
     private readonly otpService: OtpService,
     private readonly mailService: MailService,
     private readonly tokenService: TokenService,
     private readonly merchantService: MerchantService,
     private readonly customerService: CustomerService,
   ) {}
+
+  /**
+   * Get authenticated user's profile with role-specific details.
+   *
+   * - MERCHANT: includes merchant record
+   * - STAFF: includes staff profile(s) with merchant info
+   * - CUSTOMER: includes customer profile
+   */
+  async getProfile(userId: string) {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const profile: Record<string, unknown> = {
+      id: user.id,
+      email: user.email,
+      phone: user.phone,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      isVerified: user.isEmailVerified,
+      isActive: user.isActive,
+      createdAt: user.createdAt,
+    };
+
+    // Attach role-specific details
+    if (user.role === Role.MERCHANT) {
+      const merchants = await this.merchantService.getMerchantsByOwnerId(user.id);
+      profile.merchant = merchants.length > 0 ? merchants[0] : null;
+    } else if (user.role === Role.STAFF) {
+      const staffProfiles = await this.staffProfileRepository.find({
+        where: { userId: user.id },
+        relations: ['merchant'],
+      });
+      profile.staffProfiles = staffProfiles;
+    } else if (user.role === Role.CUSTOMER) {
+      const customerProfile = await this.customerService.findByUserId(user.id);
+      profile.customerProfile = customerProfile;
+    }
+
+    return profile;
+  }
 
   /**
    * Initiate merchant registration

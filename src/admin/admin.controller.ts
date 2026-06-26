@@ -31,6 +31,7 @@ import { MerchantFilterDto } from './dto/merchant-filter.dto';
 import { AnalyticsFilterDto } from './dto/analytics-filter.dto';
 import { AuditFilterDto } from './dto/audit-filter.dto';
 import { UserFilterDto } from './dto/user-filter.dto';
+import { HealthService } from '../health/health.service';
 
 /**
  * Generic success response wrapper.
@@ -51,6 +52,7 @@ export class AdminController {
     private readonly merchantService: MerchantService,
     private readonly auditService: AuditService,
     private readonly supportService: SupportService,
+    private readonly healthService: HealthService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -88,6 +90,52 @@ export class AdminController {
   async getDashboardStats(): Promise<SuccessResponseDto<DashboardStats>> {
     const stats = await this.adminService.getDashboardStats();
     return { status: 'success', data: stats };
+  }
+
+  // ---------------------------------------------------------------------------
+  //  System Health
+  // ---------------------------------------------------------------------------
+
+  @Get('system/health')
+  @ApiOperation({ summary: 'System health check (DB, Redis)' })
+  @ApiResponse({
+    status: 200,
+    description: 'System health status',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'ok' },
+        timestamp: { type: 'string', format: 'date-time' },
+        uptime: { type: 'number', example: 12345 },
+        services: {
+          type: 'object',
+          properties: {
+            database: { type: 'object', properties: { status: { type: 'string', example: 'up' } } },
+            redis: { type: 'object', properties: { status: { type: 'string', example: 'up' } } },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 503, description: 'Service is unhealthy' })
+  @ApiResponse({ status: 403, description: 'Access denied: Admin role required', type: ErrorResponseDto })
+  async getSystemHealth() {
+    const health = {
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      services: {
+        database: await this.healthService.checkDatabase(),
+        redis: await this.healthService.checkRedis(),
+      },
+    };
+
+    const allHealthy = Object.values(health.services).every(
+      (s) => s.status === 'up',
+    );
+    health.status = allHealthy ? 'ok' : 'degraded';
+
+    return { status: 'success', data: health };
   }
 
   // ---------------------------------------------------------------------------

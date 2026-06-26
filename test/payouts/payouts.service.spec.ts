@@ -11,6 +11,7 @@ import { Payout } from '../../src/payouts/entities/payout.entity';
 import { PayoutStatus } from '../../src/payouts/enums/payout-status.enum';
 import { Wallet } from '../../src/wallet/entities/wallet.entity';
 import { StaffProfile } from '../../src/staff/entities/staff-profile.entity';
+import { Merchant } from '../../src/merchant/entities/merchant.entity';
 
 describe('PayoutService', () => {
   let service: PayoutService;
@@ -139,6 +140,12 @@ describe('PayoutService', () => {
         {
           provide: getRepositoryToken(StaffProfile),
           useValue: mockStaffProfileRepository,
+        },
+        {
+          provide: getRepositoryToken(Merchant),
+          useValue: {
+            findOne: jest.fn(),
+          },
         },
         {
           provide: 'BullQueue_payouts',

@@ -1,19 +1,18 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiProduces } from '@nestjs/swagger';
-import { DataSource } from 'typeorm';
-import Redis from 'ioredis';
 import {
   HealthResponse,
   LivenessResponse,
   ReadinessResponse,
   NotReadyResponse,
 } from './dto';
+import { HealthService } from './health.service';
 
 @ApiTags('health')
 @Controller('health')
 @ApiProduces('application/json')
 export class HealthController {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(private readonly healthService: HealthService) {}
 
   @Get()
   @ApiOperation({ summary: 'Health check endpoint' })
@@ -33,8 +32,8 @@ export class HealthController {
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
       services: {
-        database: await this.checkDatabase(),
-        redis: await this.checkRedis(),
+        database: await this.healthService.checkDatabase(),
+        redis: await this.healthService.checkRedis(),
       },
     };
 
@@ -71,32 +70,12 @@ export class HealthController {
     type: NotReadyResponse,
   })
   async readiness() {
-    const dbHealthy = (await this.checkDatabase()).status === 'up';
+    const dbHealthy = (await this.healthService.checkDatabase()).status === 'up';
 
     if (!dbHealthy) {
       return { status: 'not_ready', reason: 'Database not connected' };
     }
 
     return { status: 'ready', timestamp: new Date().toISOString() };
-  }
-
-  private async checkDatabase() {
-    try {
-      await this.dataSource.query('SELECT 1');
-      return { status: 'up' };
-    } catch {
-      return { status: 'down', error: 'Database connection failed' };
-    }
-  }
-
-  private async checkRedis() {
-    try {
-      const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
-      await redis.ping();
-      await redis.quit();
-      return { status: 'up' };
-    } catch {
-      return { status: 'down', error: 'Redis connection failed' };
-    }
   }
 }

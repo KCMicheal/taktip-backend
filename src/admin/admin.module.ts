@@ -7,6 +7,7 @@ import { MerchantModule } from '../merchant/merchant.module';
 import { PayoutsModule } from '../payouts/payouts.module';
 import { AuditModule } from '../audit/audit.module';
 import { SupportModule } from '../support/support.module';
+import { HealthModule } from '../health/health.module';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 
@@ -23,6 +24,8 @@ import { AdminService } from './admin.service';
     AuditModule,
     // Import for SupportService
     SupportModule,
+    // Import for HealthService
+    HealthModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],

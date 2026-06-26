@@ -8,6 +8,8 @@ import { EntityStatus } from '../common/enums/entity-status.enum';
 import { ShiftStatus } from '../shifts/enums/shift-status.enum';
 import { KycStatus } from './enums/kyc-status.enum';
 import { PaginationService, PaginatedResult } from '../common/pagination';
+import { Wallet } from '../wallet/entities/wallet.entity';
+import { TipsService } from '../tips/tips.service';
 
 @Injectable()
 export class MerchantService {
@@ -18,7 +20,10 @@ export class MerchantService {
     private readonly merchantRepository: Repository<Merchant>,
     @InjectRepository(StaffProfile)
     private readonly staffProfileRepository: Repository<StaffProfile>,
+    @InjectRepository(Wallet)
+    private readonly walletRepository: Repository<Wallet>,
     private readonly paginationService: PaginationService,
+    private readonly tipsService: TipsService,
   ) {}
 
   /**
@@ -515,5 +520,105 @@ export class MerchantService {
     merchant.status = EntityStatus.SUSPENDED;
 
     return this.merchantRepository.save(merchant);
+  }
+
+  /**
+   * GET /merchant/settings
+   * Retrieve settings for a merchant by ID.
+   */
+  async getSettings(merchantId: string): Promise<{ tipPolicy: Record<string, unknown> | null }> {
+    const merchant = await this.getMerchantById(merchantId);
+    return { tipPolicy: merchant.tipPolicy };
+  }
+
+  /**
+   * PATCH /merchant/settings
+   * Update settings for a merchant by ID.
+   */
+  async updateSettings(
+    merchantId: string,
+    settings: { tipPolicy?: Record<string, unknown> },
+  ): Promise<{ tipPolicy: Record<string, unknown> | null }> {
+    const merchant = await this.getMerchantById(merchantId);
+    if (settings.tipPolicy !== undefined) {
+      merchant.tipPolicy = settings.tipPolicy;
+    }
+    const saved = await this.merchantRepository.save(merchant);
+    return { tipPolicy: saved.tipPolicy };
+  }
+
+  /**
+   * GET /merchant/dashboard/stats
+   * Aggregated dashboard statistics for a merchant.
+   */
+  async getDashboardStats(merchantId: string): Promise<{
+    tipsToday: number;
+    tipsTodayVolume: number;
+    tipsThisWeek: number;
+    tipsThisWeekVolume: number;
+    activeStaffCount: number;
+    clockedInStaffCount: number;
+    walletBalance: number;
+    topStaff: Array<{ staffProfileId: string; displayName: string; totalAmount: number; tipCount: number }>;
+  }> {
+    // Validate merchant exists
+    await this.getMerchantById(merchantId);
+
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+    // Start of week (Monday)
+    const dayOfWeek = now.getDay();
+    const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Monday = 0
+    const startOfWeek = new Date(startOfToday);
+    startOfWeek.setDate(startOfWeek.getDate() - diff);
+
+    // Tips today
+    const tipsTodayAgg = await this.tipsService.getMerchantTipsAggregation(merchantId, startOfToday, endOfToday);
+    const tipsToday = tipsTodayAgg.tipCount;
+    const tipsTodayVolume = tipsTodayAgg.totalAmount;
+
+    // Tips this week
+    const tipsWeekAgg = await this.tipsService.getMerchantTipsAggregation(merchantId, startOfWeek, endOfToday);
+    const tipsThisWeek = tipsWeekAgg.tipCount;
+    const tipsThisWeekVolume = tipsWeekAgg.totalAmount;
+
+    // Active staff count
+    const activeStaffCount = await this.staffProfileRepository.count({
+      where: { merchantId, status: EntityStatus.ACTIVE },
+    });
+
+    // Clocked-in staff count
+    const clockedInStaffCount = await this.staffProfileRepository.count({
+      where: { merchantId, status: EntityStatus.ACTIVE, isClockedIn: true },
+    });
+
+    // Wallet balance
+    let walletBalance = 0;
+    try {
+      const wallet = await this.walletRepository.findOne({
+        where: { ownerId: merchantId, ownerType: 'merchant' },
+      });
+      if (wallet) {
+        walletBalance = Number(wallet.balanceAvailable) + Number(wallet.balancePending);
+      }
+    } catch {
+      this.logger.warn(`No wallet found for merchant ${merchantId}, defaulting balance to 0`);
+    }
+
+    // Top staff by tips received (top 5)
+    const topStaff = await this.tipsService.getTopStaffByMerchant(merchantId, 5);
+
+    return {
+      tipsToday,
+      tipsTodayVolume,
+      tipsThisWeek,
+      tipsThisWeekVolume,
+      activeStaffCount,
+      clockedInStaffCount,
+      walletBalance,
+      topStaff,
+    };
   }
 }

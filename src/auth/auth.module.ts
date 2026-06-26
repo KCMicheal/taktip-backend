@@ -13,6 +13,7 @@ import { AuthController } from './controllers/auth.controller';
 import { User } from './entities/user.entity';
 import { RefreshToken } from './entities/refresh-token.entity';
 import { PasswordReset } from './entities/password-reset.entity';
+import { StaffProfile } from '../staff/entities/staff-profile.entity';
 import { jwtAuthGuard } from './guards/jwt-auth.guard';
 import { rolesGuard } from './guards/roles.guard';
 import { MerchantModule } from '../merchant/merchant.module';
@@ -33,7 +34,7 @@ import { CustomerModule } from '../customer/customer.module';
 @Global()
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, RefreshToken, PasswordReset]),
+    TypeOrmModule.forFeature([User, RefreshToken, PasswordReset, StaffProfile]),
     ConfigModule,
     MerchantModule,
     CustomerModule,

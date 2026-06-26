@@ -1,4 +1,4 @@
-import { Entity, Column } from 'typeorm';
+import { Entity, Column, Index } from 'typeorm';
 import { BaseEntity } from '../../common/entities/base.entity';
 import { PayoutStatus } from '../enums/payout-status.enum';
 
@@ -6,6 +6,10 @@ import { PayoutStatus } from '../enums/payout-status.enum';
 export class Payout extends BaseEntity {
   @Column({ type: 'uuid', name: 'staff_profile_id' })
   staffProfileId: string;
+
+  @Column({ type: 'uuid', nullable: true, name: 'merchant_id' })
+  @Index()
+  merchantId: string | null;
 
   @Column({ type: 'decimal', precision: 15, scale: 2 })
   amount: number;

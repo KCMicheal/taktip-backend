@@ -70,4 +70,7 @@ export class Merchant extends BaseEntity {
 
   @Column({ type: 'timestamp', nullable: true })
   approvedAt: Date | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  tipPolicy: Record<string, unknown> | null;
 }

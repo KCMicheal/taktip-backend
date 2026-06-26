@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Merchant } from './entities/merchant.entity';
 import { StaffInvite } from './entities/staff-invite.entity';
@@ -12,7 +12,7 @@ import { MerchantController } from './merchant.controller';
 import { AuthInviteController } from './controllers/auth-invite.controller';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Merchant, StaffInvite, StaffProfile]), WalletModule, TipsModule, QrCodesModule],
+  imports: [TypeOrmModule.forFeature([Merchant, StaffInvite, StaffProfile]), forwardRef(() => WalletModule), TipsModule, QrCodesModule],
   controllers: [MerchantController, AuthInviteController],
   providers: [MerchantService, InviteService],
   exports: [MerchantService, InviteService, TypeOrmModule],

@@ -6,6 +6,7 @@ import { AdminService, DashboardStats } from '../../src/admin/admin.service';
 import { MerchantService } from '../../src/merchant/merchant.service';
 import { AuditService } from '../../src/audit/audit.service';
 import { SupportService } from '../../src/support/support.service';
+import { HealthService } from '../../src/health/health.service';
 import { AnalyticsFilterDto } from '../../src/admin/dto/analytics-filter.dto';
 import { AuditFilterDto } from '../../src/admin/dto/audit-filter.dto';
 import { SupportTicketFilterDto } from '../../src/support/dto/support-ticket-filter.dto';
@@ -47,6 +48,11 @@ describe('AdminController', () => {
     signAsync: jest.fn(),
   };
 
+  const mockHealthService = {
+    checkDatabase: jest.fn().mockResolvedValue({ status: 'up' }),
+    checkRedis: jest.fn().mockResolvedValue({ status: 'up' }),
+  };
+
   const mockUser = { sub: 'admin-uuid' };
 
   beforeEach(async () => {
@@ -57,6 +63,7 @@ describe('AdminController', () => {
         { provide: MerchantService, useValue: mockMerchantService },
         { provide: AuditService, useValue: mockAuditService },
         { provide: SupportService, useValue: mockSupportService },
+        { provide: HealthService, useValue: mockHealthService },
         { provide: JwtService, useValue: mockJwtService },
         Reflector,
       ],

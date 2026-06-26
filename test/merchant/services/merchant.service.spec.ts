@@ -9,6 +9,8 @@ import { BusinessType } from '../../../src/common/enums/business-type.enum';
 import { EntityStatus } from '../../../src/common/enums/entity-status.enum';
 import { KycStatus } from '../../../src/merchant/enums/kyc-status.enum';
 import { PaginationService } from '../../../src/common/pagination/pagination.service';
+import { Wallet } from '../../../src/wallet/entities/wallet.entity';
+import { TipsService } from '../../../src/tips/tips.service';
 
 describe('MerchantService', () => {
   let service: MerchantService;
@@ -82,7 +84,21 @@ describe('MerchantService', () => {
           provide: getRepositoryToken(StaffProfile),
           useValue: {
             find: jest.fn(),
+            count: jest.fn(),
             createQueryBuilder: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(Wallet),
+          useValue: {
+            findOne: jest.fn(),
+          },
+        },
+        {
+          provide: TipsService,
+          useValue: {
+            getMerchantTipsAggregation: jest.fn(),
+            getTopStaffByMerchant: jest.fn(),
           },
         },
       ],
