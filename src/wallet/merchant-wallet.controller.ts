@@ -3,9 +3,9 @@ import {
   Get,
   Post,
   Body,
-  Param,
   Query,
   UseGuards,
+  NotFoundException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -14,17 +14,16 @@ import {
   ApiQuery,
   ApiResponse,
 } from '@nestjs/swagger';
-import { WalletService, TransactionResponseDto, TransactionsListDto } from './wallet.service';
+import { WalletService, TransactionsListDto } from './wallet.service';
 import { Wallet } from './entities/wallet.entity';
-import { Transaction } from './entities/transaction.entity';
-import { DepositDto } from './dto/deposit.dto';
-import { WithdrawDto } from './dto/withdraw.dto';
-import { TransferDto } from './dto/transfer.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Role } from '../auth/enums/role.enum';
+import { PayoutService } from '../payouts/payouts.service';
+import { RequestPayoutDto } from '../payouts/dto/request-payout.dto';
+import { MerchantService } from '../merchant/merchant.service';
 
 /**
  * Generic success response wrapper
@@ -40,7 +39,11 @@ class SuccessResponseDto<T> {
 @Roles(Role.MERCHANT, Role.ADMIN)
 @Controller('merchant/wallet')
 export class MerchantWalletController {
-  constructor(private readonly walletService: WalletService) {}
+  constructor(
+    private readonly walletService: WalletService,
+    private readonly payoutService: PayoutService,
+    private readonly merchantService: MerchantService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'Get the merchant\'s own wallet' })
@@ -131,5 +134,35 @@ export class MerchantWalletController {
       limit: limitNum,
     });
     return { status: 'success', data };
+  }
+
+  @Post('payout')
+  @ApiOperation({ summary: 'Request a payout from merchant wallet balance' })
+  @ApiResponse({
+    status: 201,
+    description: 'Payout requested successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: { type: 'object' },
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Insufficient balance or invalid request' })
+  async requestPayout(
+    @CurrentUser() user: { sub: string },
+    @Body() dto: RequestPayoutDto,
+  ) {
+    const merchants = await this.merchantService.getMerchantsByOwnerId(user.sub);
+    if (!merchants.length) {
+      throw new NotFoundException('No merchant found for this user');
+    }
+    const payout = await this.payoutService.requestMerchantPayout(
+      user.sub,
+      merchants[0].id,
+      dto.amount,
+    );
+    return { status: 'success', data: payout };
   }
 }

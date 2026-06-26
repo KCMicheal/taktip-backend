@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, In } from 'typeorm';
+import { Repository, Between, In, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 import { Tip } from './entities/tip.entity';
 import { TipSource } from './enums/tip-source.enum';
 import { TipResponseDto } from './dto/tip-response.dto';
@@ -189,5 +189,71 @@ export class TipsService {
       periodStart: startDate ? startDate.toISOString() : null,
       periodEnd: endDate ? endDate.toISOString() : null,
     };
+  }
+
+  /**
+   * Get aggregated tips for a merchant within a date range.
+   */
+  async getMerchantTipsAggregation(
+    merchantId: string,
+    startDate: Date,
+    endDate: Date,
+  ): Promise<{ totalAmount: number; tipCount: number }> {
+    const result: { totalAmount: string; tipCount: string } | undefined = await this.tipRepository
+      .createQueryBuilder('tip')
+      .select('COALESCE(SUM(tip.amount), 0)', 'totalAmount')
+      .addSelect('COUNT(tip.id)', 'tipCount')
+      .where('tip.merchantId = :merchantId', { merchantId })
+      .andWhere('tip.createdAt >= :startDate', { startDate })
+      .andWhere('tip.createdAt <= :endDate', { endDate })
+      .getRawOne();
+
+    return {
+      totalAmount: parseFloat(result?.totalAmount ?? '0') || 0,
+      tipCount: parseInt(result?.tipCount ?? '0', 10) || 0,
+    };
+  }
+
+  /**
+   * Get top N staff by total tips received for a merchant.
+   */
+  async getTopStaffByMerchant(
+    merchantId: string,
+    limit: number = 5,
+  ): Promise<Array<{ staffProfileId: string; displayName: string; totalAmount: number; tipCount: number }>> {
+    interface AggregationRow {
+      staffProfileId: string;
+      totalAmount: string;
+      tipCount: string;
+    }
+
+    const results: AggregationRow[] = await this.tipRepository
+      .createQueryBuilder('tip')
+      .select('tip.staffProfileId', 'staffProfileId')
+      .addSelect('COALESCE(SUM(tip.amount), 0)', 'totalAmount')
+      .addSelect('COUNT(tip.id)', 'tipCount')
+      .where('tip.merchantId = :merchantId', { merchantId })
+      .groupBy('tip.staffProfileId')
+      .orderBy('"totalAmount"', 'DESC')
+      .limit(limit)
+      .getRawMany();
+
+    // Enrich with staff display names
+    const staffProfileIds = results.map((r) => r.staffProfileId);
+    const staffProfiles = staffProfileIds.length > 0
+      ? await this.staffProfileRepository.findBy({ id: In(staffProfileIds) })
+      : [];
+
+    const nameMap = new Map<string, string>();
+    for (const profile of staffProfiles) {
+      nameMap.set(profile.id, profile.displayName || 'Unknown Staff');
+    }
+
+    return results.map((r) => ({
+      staffProfileId: r.staffProfileId,
+      displayName: nameMap.get(r.staffProfileId) || 'Unknown Staff',
+      totalAmount: parseFloat(r.totalAmount) || 0,
+      tipCount: parseInt(r.tipCount, 10) || 0,
+    }));
   }
 }

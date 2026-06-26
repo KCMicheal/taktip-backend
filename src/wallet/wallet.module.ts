@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { WalletController } from './wallet.controller';
 import { MerchantWalletController } from './merchant-wallet.controller';
@@ -10,12 +10,16 @@ import { Transaction } from './entities/transaction.entity';
 import { StaffProfile } from '../staff/entities/staff-profile.entity';
 import { CustomerModule } from '../customer/customer.module';
 import { TipsModule } from '../tips/tips.module';
+import { PayoutsModule } from '../payouts/payouts.module';
+import { MerchantModule } from '../merchant/merchant.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Wallet, Transaction, StaffProfile]),
     CustomerModule,
     TipsModule,
+    PayoutsModule,
+    forwardRef(() => MerchantModule),
   ],
   controllers: [
     WalletController,

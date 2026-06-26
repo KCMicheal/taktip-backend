@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Get,
   Body,
   HttpCode,
   HttpStatus,
@@ -272,6 +273,44 @@ export class AuthController {
   })
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto.token, dto.newPassword);
+  }
+
+  @Get("me")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Get current authenticated user's profile" })
+  @ApiResponse({
+    status: 200,
+    description: "User profile retrieved successfully",
+    schema: {
+      type: "object",
+      properties: {
+        status: { type: "string", example: "success" },
+        data: {
+          type: "object",
+          properties: {
+            id: { type: "string", format: "uuid" },
+            email: { type: "string" },
+            phone: { type: "string", nullable: true },
+            firstName: { type: "string", nullable: true },
+            lastName: { type: "string", nullable: true },
+            role: { type: "string" },
+            isVerified: { type: "boolean" },
+            isActive: { type: "boolean" },
+            createdAt: { type: "string", format: "date-time" },
+            merchant: { type: "object", nullable: true },
+            staffProfiles: { type: "array", nullable: true },
+            customerProfile: { type: "object", nullable: true },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
+  async getProfile(@CurrentUser() user: UserResponse) {
+    const profile = await this.authService.getProfile(user.sub);
+    return { status: "success", data: profile };
   }
 
   @Post("change-password")

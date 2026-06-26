@@ -16,6 +16,7 @@ import { Role } from '@/auth/enums/role.enum';
 import { Merchant } from '@/merchant/entities/merchant.entity';
 import { MerchantService } from '@/merchant/merchant.service';
 import { CustomerService } from '@/customer/customer.service';
+import { StaffProfile } from '@/staff/entities/staff-profile.entity';
 
 jest.mock('bcrypt');
 jest.mock('jose');
@@ -116,12 +117,20 @@ describe('AuthService', () => {
           provide: MerchantService,
           useValue: {
             createMerchant: jest.fn(),
+            getMerchantsByOwnerId: jest.fn(),
           },
         },
         {
           provide: CustomerService,
           useValue: {
             getOrCreateProfile: jest.fn(),
+            findByUserId: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(StaffProfile),
+          useValue: {
+            find: jest.fn(),
           },
         },
       ],

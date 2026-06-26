@@ -5,6 +5,8 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { QrCodesService } from '../../src/qrcodes/qrcodes.service';
 import { QrCode } from '../../src/qrcodes/entities/qrcode.entity';
+import { Merchant } from '../../src/merchant/entities/merchant.entity';
+import { StaffProfile } from '../../src/staff/entities/staff-profile.entity';
 
 // Mock the `qrcode` library
 jest.mock('qrcode', () => ({
@@ -21,6 +23,16 @@ describe('QrCodesService', () => {
     create: jest.fn(),
     save: jest.fn(),
     update: jest.fn(),
+  };
+
+  const mockMerchantRepository = {
+    findOne: jest.fn(),
+    find: jest.fn(),
+  };
+
+  const mockStaffProfileRepository = {
+    findOne: jest.fn(),
+    find: jest.fn(),
   };
 
   const mockConfigService = {
@@ -55,6 +67,14 @@ describe('QrCodesService', () => {
         {
           provide: getRepositoryToken(QrCode),
           useValue: mockQrCodeRepository,
+        },
+        {
+          provide: getRepositoryToken(Merchant),
+          useValue: mockMerchantRepository,
+        },
+        {
+          provide: getRepositoryToken(StaffProfile),
+          useValue: mockStaffProfileRepository,
         },
         {
           provide: ConfigService,

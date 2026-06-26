@@ -4,6 +4,8 @@ import { JwtService } from '@nestjs/jwt';
 import { MerchantWalletController } from '../../src/wallet/merchant-wallet.controller';
 import { WalletService } from '../../src/wallet/wallet.service';
 import { Role } from '../../src/auth/enums/role.enum';
+import { PayoutService } from '../../src/payouts/payouts.service';
+import { MerchantService } from '../../src/merchant/merchant.service';
 
 describe('MerchantWalletController', () => {
   let controller: MerchantWalletController;
@@ -13,6 +15,14 @@ describe('MerchantWalletController', () => {
     getWalletByOwnerId: jest.fn(),
     getOrCreateMerchantWallet: jest.fn(),
     getTransactions: jest.fn(),
+  };
+
+  const mockPayoutService = {
+    requestMerchantPayout: jest.fn(),
+  };
+
+  const mockMerchantService = {
+    getMerchantsByOwnerId: jest.fn(),
   };
 
   const mockJwtService = {
@@ -59,6 +69,14 @@ describe('MerchantWalletController', () => {
         {
           provide: WalletService,
           useValue: mockWalletService,
+        },
+        {
+          provide: PayoutService,
+          useValue: mockPayoutService,
+        },
+        {
+          provide: MerchantService,
+          useValue: mockMerchantService,
         },
         {
           provide: JwtService,

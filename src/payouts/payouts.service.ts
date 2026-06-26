@@ -14,6 +14,7 @@ import { Payout } from './entities/payout.entity';
 import { PayoutStatus } from './enums/payout-status.enum';
 import { Wallet } from '../wallet/entities/wallet.entity';
 import { StaffProfile } from '../staff/entities/staff-profile.entity';
+import { Merchant } from '../merchant/entities/merchant.entity';
 
 /**
  * Platform fee as a fraction of the payout amount.
@@ -32,6 +33,8 @@ export class PayoutService {
     private readonly walletRepository: Repository<Wallet>,
     @InjectRepository(StaffProfile)
     private readonly staffProfileRepository: Repository<StaffProfile>,
+    @InjectRepository(Merchant)
+    private readonly merchantRepository: Repository<Merchant>,
     @InjectQueue('payouts')
     private readonly payoutQueue: Queue,
     private readonly configService: ConfigService,
@@ -130,6 +133,80 @@ export class PayoutService {
 
       this.logger.log(
         `Payout requested: ${reference} — ${amount} (net: ${netAmount}) for staff profile ${staffProfile.id}`,
+      );
+
+      return payout;
+    });
+  }
+
+  /**
+   * POST /v1/merchant/wallet/payout
+   * Request a payout — merchant withdraws from their merchant wallet.
+   *
+   * Steps:
+   * 1. Look up the merchant by ownerId
+   * 2. Find the merchant's wallet (ownerType = 'merchant')
+   * 3. Atomically debit balance_available, credit balance_processing
+   * 4. Create a PENDING payout record with merchantId
+   */
+  async requestMerchantPayout(userId: string, merchantId: string, amount: number): Promise<Payout> {
+    // 1. Validate merchant exists and user owns it
+    const merchant = await this.merchantRepository.findOne({
+      where: { id: merchantId, ownerId: userId },
+    });
+
+    if (!merchant) {
+      throw new NotFoundException('Merchant not found for this user');
+    }
+
+    // 2. Find merchant wallet
+    const wallet = await this.walletRepository.findOne({
+      where: { ownerId: merchant.id, ownerType: 'merchant' },
+    });
+
+    if (!wallet) {
+      throw new NotFoundException('Merchant wallet not found');
+    }
+
+    // Calculate fee and net amount
+    const fee = Math.round((amount * PAYOUT_FEE_PERCENT) * 100) / 100;
+    const netAmount = amount - fee;
+    const reference = this.generateReference('MPOUT');
+
+    // 3. & 4. Atomic transaction
+    return this.walletRepository.manager.transaction(async (entityManager) => {
+      const debitResult: any[] = await entityManager.query(
+        'UPDATE "wallets" SET "balance_available" = CAST("balance_available" AS numeric(15,2)) - $1 WHERE "id" = $2 AND "balance_available" >= $1',
+        [amount, wallet.id],
+      );
+
+      if (debitResult[1] === 0) {
+        throw new BadRequestException('Insufficient wallet balance');
+      }
+
+      await entityManager.query(
+        'UPDATE "wallets" SET "balance_processing" = CAST("balance_processing" AS numeric(15,2)) + $1 WHERE "id" = $2',
+        [amount, wallet.id],
+      );
+
+      const payout = entityManager.create(Payout, {
+        staffProfileId: '00000000-0000-0000-0000-000000000000', // Placeholder — merchant payouts use merchantId instead
+        merchantId: merchant.id,
+        amount,
+        fee,
+        netAmount,
+        bankAccount: {},
+        payoutStatus: PayoutStatus.PENDING,
+        reference,
+        adminId: null,
+        processedAt: null,
+        notes: null,
+      });
+
+      await entityManager.save(payout);
+
+      this.logger.log(
+        `Merchant payout requested: ${reference} — ${amount} (net: ${netAmount}) for merchant ${merchant.id}`,
       );
 
       return payout;

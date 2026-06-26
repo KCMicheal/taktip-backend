@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Post, Delete, Param, Body, Query, UseGuards, ParseUUIDPipe, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Controller, Get, Put, Patch, Post, Delete, Param, Body, Query, UseGuards, ParseUUIDPipe, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -10,6 +10,7 @@ import { MerchantService } from './merchant.service';
 import { InviteService } from './services/invite.service';
 import { InviteStaffDto } from './dto/invite.dto';
 import { UpdateMerchantDto } from './dto/update-merchant.dto';
+import { UpdateMerchantSettingsDto } from './dto/update-merchant-settings.dto';
 import { SearchablePaginationParamsDto, InvitePaginationParamsDto } from '../common/pagination';
 import { TipsService } from '../tips/tips.service';
 
@@ -113,6 +114,185 @@ export class MerchantController {
   async getMyMerchants(@CurrentUser() user: { sub: string }) {
     const merchants = await this.merchantService.getMerchantsByOwnerId(user.sub);
     return { status: 'success', data: merchants };
+  }
+
+  @Get('profile')
+  @ApiOperation({ summary: 'Get current merchant profile (resolves from authenticated user)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Merchant profile retrieved',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            name: { type: 'string', example: "Joe's Restaurant" },
+            shortCode: { type: 'string', example: 'CODE123456-GR' },
+            businessType: { type: 'string' },
+            address: { type: 'string' },
+            email: { type: 'string' },
+            phone: { type: 'string' },
+            city: { type: 'string' },
+            state: { type: 'string' },
+            country: { type: 'string' },
+            logoUrl: { type: 'string' },
+            currency: { type: 'string' },
+            timezone: { type: 'string' },
+            kycStatus: { type: 'number' },
+            createdAt: { type: 'string', format: 'date-time' },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'No merchant found for this user' })
+  async getProfile(@CurrentUser() user: { sub: string }) {
+    const merchants = await this.merchantService.getMerchantsByOwnerId(user.sub);
+    if (!merchants.length) {
+      throw new NotFoundException('No merchant found for this user');
+    }
+    return { status: 'success', data: merchants[0] };
+  }
+
+  @Patch('profile')
+  @ApiOperation({ summary: 'Update current merchant profile (resolves from authenticated user)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Merchant profile updated',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: { type: 'object' },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'No merchant found for this user' })
+  async updateProfile(
+    @Body() dto: UpdateMerchantDto,
+    @CurrentUser() user: { sub: string },
+  ) {
+    const merchants = await this.merchantService.getMerchantsByOwnerId(user.sub);
+    if (!merchants.length) {
+      throw new NotFoundException('No merchant found for this user');
+    }
+    const updated = await this.merchantService.updateMerchant(merchants[0].id, dto);
+    return { status: 'success', data: updated };
+  }
+
+  @Get('settings')
+  @ApiOperation({ summary: 'Get merchant settings (tip policy, distribution rules)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Merchant settings retrieved',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            tipPolicy: {
+              type: 'object',
+              nullable: true,
+              description: 'Tip policy configuration',
+            },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'No merchant found for this user' })
+  async getSettings(@CurrentUser() user: { sub: string }) {
+    const merchants = await this.merchantService.getMerchantsByOwnerId(user.sub);
+    if (!merchants.length) {
+      throw new NotFoundException('No merchant found for this user');
+    }
+    const settings = await this.merchantService.getSettings(merchants[0].id);
+    return { status: 'success', data: settings };
+  }
+
+  @Patch('settings')
+  @ApiOperation({ summary: 'Update merchant settings (tip policy, distribution rules)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Merchant settings updated',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            tipPolicy: { type: 'object', nullable: true },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'No merchant found for this user' })
+  async updateSettings(
+    @Body() dto: UpdateMerchantSettingsDto,
+    @CurrentUser() user: { sub: string },
+  ) {
+    const merchants = await this.merchantService.getMerchantsByOwnerId(user.sub);
+    if (!merchants.length) {
+      throw new NotFoundException('No merchant found for this user');
+    }
+    const settings = await this.merchantService.updateSettings(
+      merchants[0].id,
+      dto,
+    );
+    return { status: 'success', data: settings };
+  }
+
+  @Get('dashboard/stats')
+  @ApiOperation({ summary: 'Get merchant dashboard statistics (tips, staff, wallet)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Dashboard statistics',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            tipsToday: { type: 'number', example: 15 },
+            tipsTodayVolume: { type: 'number', example: 45000 },
+            tipsThisWeek: { type: 'number', example: 98 },
+            tipsThisWeekVolume: { type: 'number', example: 294000 },
+            activeStaffCount: { type: 'number', example: 12 },
+            clockedInStaffCount: { type: 'number', example: 5 },
+            walletBalance: { type: 'number', example: 150000 },
+            topStaff: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  staffProfileId: { type: 'string', format: 'uuid' },
+                  displayName: { type: 'string' },
+                  totalAmount: { type: 'number' },
+                  tipCount: { type: 'number' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'No merchant found for this user' })
+  async getDashboardStats(@CurrentUser() user: { sub: string }) {
+    const merchants = await this.merchantService.getMerchantsByOwnerId(user.sub);
+    if (!merchants.length) {
+      throw new NotFoundException('No merchant found for this user');
+    }
+    const stats = await this.merchantService.getDashboardStats(merchants[0].id);
+    return { status: 'success', data: stats };
   }
 
   @Get(':id')

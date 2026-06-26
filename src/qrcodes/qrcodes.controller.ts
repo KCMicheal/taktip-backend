@@ -224,13 +224,13 @@ export class QrCodesController {
     return { status: 'success', message: 'QR code deactivated' };
   }
 
-  @Get('tip/:shortCode')
+  @Get('tip/:qrCode')
   @Public()
-  @ApiOperation({ summary: 'Resolve a QR code short code to tip page data' })
-  @ApiParam({ name: 'shortCode', description: 'QR code short code (8 hex chars)' })
+  @ApiOperation({ summary: 'Resolve a QR code short code to enriched tip page data' })
+  @ApiParam({ name: 'qrCode', description: 'QR code short code (8 hex chars)' })
   @ApiResponse({
     status: 200,
-    description: 'Tip page data resolved from short code',
+    description: 'Enriched tip page data resolved from short code',
     schema: {
       type: 'object',
       properties: {
@@ -238,29 +238,23 @@ export class QrCodesController {
         data: {
           type: 'object',
           properties: {
-            qrCodeId: { type: 'string', format: 'uuid', example: '550e8400-e29b-41d4-a716-446655440000', description: 'The QR code UUID needed for guest tip checkout' },
-            merchantId: { type: 'string', format: 'uuid', example: '550e8400-e29b-41d4-a716-446655440000' },
-            staffProfileId: { type: 'string', format: 'uuid', nullable: true, example: '660e8400-e29b-41d4-a716-446655440001' },
+            qrCodeId: { type: 'string', format: 'uuid' },
+            merchantId: { type: 'string', format: 'uuid' },
+            staffProfileId: { type: 'string', format: 'uuid', nullable: true },
+            ownerName: { type: 'string', example: "Joe's Restaurant" },
+            ownerPhoto: { type: 'string', nullable: true },
+            ownerType: { type: 'string', enum: ['merchant', 'staff'] },
           },
         },
       },
     },
   })
   @ApiResponse({ status: 404, description: 'QR code not found or inactive', type: ErrorResponseDto })
-  async resolveQrCode(@Param('shortCode') shortCode: string) {
-    const qrCode = await this.qrCodesService.findByShortCode(shortCode);
+  async resolveQrCode(@Param('qrCode') qrCode: string) {
+    const data = await this.qrCodesService.resolveByShortCode(qrCode);
 
-    if (!qrCode) {
+    if (!data) {
       throw new NotFoundException('QR code not found or inactive');
-    }
-
-    const data: Record<string, unknown> = {
-      qrCodeId: qrCode.id,
-      merchantId: qrCode.merchantId,
-    };
-
-    if (qrCode.staffProfileId) {
-      data.staffProfileId = qrCode.staffProfileId;
     }
 
     return { status: 'success', data };

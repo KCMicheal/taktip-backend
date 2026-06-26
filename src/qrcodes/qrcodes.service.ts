@@ -10,6 +10,8 @@ import { ConfigService } from '@nestjs/config';
 import { randomBytes } from 'crypto';
 import * as QRCode from 'qrcode';
 import { QrCode } from './entities/qrcode.entity';
+import { Merchant } from '../merchant/entities/merchant.entity';
+import { StaffProfile } from '../staff/entities/staff-profile.entity';
 import { GenerateQrCodeDto } from './dto/generate-qrcode.dto';
 
 @Injectable()
@@ -19,6 +21,10 @@ export class QrCodesService {
   constructor(
     @InjectRepository(QrCode)
     private readonly qrCodeRepository: Repository<QrCode>,
+    @InjectRepository(Merchant)
+    private readonly merchantRepository: Repository<Merchant>,
+    @InjectRepository(StaffProfile)
+    private readonly staffProfileRepository: Repository<StaffProfile>,
     private readonly configService: ConfigService,
   ) {}
 
@@ -124,6 +130,58 @@ export class QrCodesService {
     return this.qrCodeRepository.findOne({
       where: { shortCode, isActive: true },
     });
+  }
+
+  /**
+   * Resolve a QR code by its short code and return enriched tip page data
+   * including owner name, photo, and owner type.
+   */
+  async resolveByShortCode(shortCode: string): Promise<{
+    qrCodeId: string;
+    merchantId: string;
+    staffProfileId: string | null;
+    ownerName: string;
+    ownerPhoto: string | null;
+    ownerType: 'merchant' | 'staff';
+  } | null> {
+    const qrCode = await this.findByShortCode(shortCode);
+    if (!qrCode) return null;
+
+    let ownerName: string;
+    let ownerPhoto: string | null = null;
+    let ownerType: 'merchant' | 'staff';
+
+    if (qrCode.staffProfileId) {
+      // Staff QR code — look up staff profile
+      ownerType = 'staff';
+      const staffProfile = await this.staffProfileRepository.findOne({
+        where: { id: qrCode.staffProfileId },
+        relations: ['user'],
+      });
+      if (staffProfile) {
+        ownerName = staffProfile.displayName || staffProfile.user?.firstName || 'Staff';
+        ownerPhoto = null; // Staff profiles don't have photo yet
+      } else {
+        ownerName = 'Staff';
+      }
+    } else {
+      // Merchant QR code — look up merchant
+      ownerType = 'merchant';
+      const merchant = await this.merchantRepository.findOne({
+        where: { id: qrCode.merchantId },
+      });
+      ownerName = merchant?.name || 'Merchant';
+      ownerPhoto = merchant?.logoUrl || null;
+    }
+
+    return {
+      qrCodeId: qrCode.id,
+      merchantId: qrCode.merchantId,
+      staffProfileId: qrCode.staffProfileId,
+      ownerName,
+      ownerPhoto,
+      ownerType,
+    };
   }
 
   /**

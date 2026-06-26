@@ -1,6 +1,8 @@
 import {
   Controller,
   Post,
+  Get,
+  Param,
   Body,
   Headers,
   HttpCode,
@@ -8,6 +10,8 @@ import {
   Logger,
   Inject,
   Req,
+  NotFoundException,
+  Query,
 } from '@nestjs/common';
 import { Request } from 'express';
 import {
@@ -28,7 +32,6 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Public } from '../auth/decorators/public.decorator';
-import { ErrorResponseDto } from '../auth/dto/response.dto';
 import {
   PaymentProvider,
   InitializeTransactionParams,
@@ -38,6 +41,7 @@ import { QrCode } from '../qrcodes/entities/qrcode.entity';
 import { Tip } from '../tips/entities/tip.entity';
 import { TipSource } from '../tips/enums/tip-source.enum';
 import { TipStatus } from '../tips/enums/tip-status.enum';
+import { PaymentStatus } from './enums/payment-status.enum';
 import { Payment } from './entities/payment.entity';
 import { StaffProfile } from '../staff/entities/staff-profile.entity';
 
@@ -103,6 +107,178 @@ export class PaymentsController {
     @InjectRepository(StaffProfile)
     private readonly staffProfileRepository: Repository<StaffProfile>,
   ) {}
+
+  /**
+   * GET /tip/:qrCode
+   *
+   * Resolve a QR code short code to checkout page data (enriched).
+   * Delegates to the QR codes resolution endpoint pattern.
+   */
+  @Get('tip/:qrCode')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Resolve QR code short code for checkout' })
+  @ApiResponse({ status: 200, description: 'QR code resolved' })
+  @ApiResponse({ status: 404, description: 'QR code not found' })
+  async resolveTipQrCode(@Param('qrCode') qrCode: string) {
+    const qrCodeEntity = await this.qrCodeRepository.findOne({
+      where: { shortCode: qrCode, isActive: true },
+    });
+
+    if (!qrCodeEntity) {
+      throw new NotFoundException('QR code not found or inactive');
+    }
+
+    // Look up staff display name
+    let staffName: string | null = null;
+    if (qrCodeEntity.staffProfileId) {
+      const staffProfile = await this.staffProfileRepository.findOne({
+        where: { id: qrCodeEntity.staffProfileId },
+        relations: ['user'],
+      });
+      if (staffProfile) {
+        staffName = staffProfile.displayName || staffProfile.user?.firstName || null;
+      }
+    }
+
+    return {
+      status: 'success',
+      data: {
+        qrCodeId: qrCodeEntity.id,
+        merchantId: qrCodeEntity.merchantId,
+        staffProfileId: qrCodeEntity.staffProfileId,
+        staffName,
+      },
+    };
+  }
+
+  /**
+   * POST /tip/:qrCode/pay
+   *
+   * Initiate a guest tip checkout using a QR code short code in the URL.
+   * This is an alias for Path A of /guest/tip that makes the QR code
+   * part of the URL path instead of the request body.
+   */
+  @Post('tip/:qrCode/pay')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Initiate a guest tip checkout via QR code URL param',
+    description:
+      'Like POST /guest/tip but the QR code short code is in the URL path' +
+      '({ amount, message?, email? }). The old /guest/tip endpoint remains functional.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Checkout URL returned',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            authorizationUrl: { type: 'string' },
+            reference: { type: 'string' },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'QR code not found or inactive' })
+  async initiateTipPay(
+    @Param('qrCode') qrCode: string,
+    @Body() dto: InitiateGuestTipDto,
+  ) {
+    // Resolve QR code from URL param, then delegate to the shared logic
+    const qrCodeEntity = await this.qrCodeRepository.findOne({
+      where: { shortCode: qrCode, isActive: true },
+    });
+
+    if (!qrCodeEntity || !qrCodeEntity.staffProfileId) {
+      throw new NotFoundException('QR code not found or inactive');
+    }
+
+    // Delegate to the existing guest tip flow by setting qrCodeId
+    dto.qrCodeId = qrCodeEntity.id;
+    return this.initiateGuestTip(dto);
+  }
+
+  /**
+   * GET /tip/:qrCode/success
+   *
+   * Polling endpoint for the guest tip checkout.  After Paystack redirects
+   * the user back to the app, the front-end calls this with the reference
+   * to check whether the payment succeeded.
+   *
+   * Returns the tip status so the UI can show a success / failure screen.
+   */
+  @Get('tip/:qrCode/success')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Poll tip payment status after redirect',
+    description:
+      'Front-end calls this after Paystack redirects the user.  ' +
+      'Uses the payment reference to look up the tip status.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Tip status',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            tipStatus: { type: 'string', example: 'COMPLETED' },
+            paymentStatus: { type: 'string', example: 'SUCCESS' },
+            amount: { type: 'number', example: 500 },
+            reference: { type: 'string', example: 'TXT-1712345678901-a1b2c3d4' },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Payment not found' })
+  async pollTipSuccess(
+    @Param('qrCode') _qrCode: string,
+    @Query('reference') reference: string,
+  ) {
+    if (!reference) {
+      return { status: 'error', message: 'Reference query parameter is required' };
+    }
+
+    const payment = await this.paymentRepository.findOne({
+      where: { reference },
+    });
+
+    if (!payment) {
+      return { status: 'error', message: 'Payment not found' };
+    }
+
+    // If the payment has a tipId, look up the tip status
+    let tipStatus: string | null = null;
+    if (payment.tipId) {
+      const tip = await this.tipRepository.findOne({
+        where: { id: payment.tipId },
+      });
+      if (tip) {
+        tipStatus = TipStatus[tip.tipStatus];
+      }
+    }
+
+    return {
+      status: 'success',
+      data: {
+        tipStatus,
+        paymentStatus: PaymentStatus[payment.paymentStatus],
+        amount: Number(payment.amount),
+        reference: payment.reference,
+      },
+    };
+  }
 
   /**
    * POST /guest/tip
