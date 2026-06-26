@@ -5,9 +5,10 @@ import { QrCodesService } from './qrcodes.service';
 import { QrCode } from './entities/qrcode.entity';
 import { Merchant } from '../merchant/entities/merchant.entity';
 import { StaffProfile } from '../staff/entities/staff-profile.entity';
+import { CustomerProfile } from '../customer/entities/customer-profile.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([QrCode, Merchant, StaffProfile])],
+  imports: [TypeOrmModule.forFeature([QrCode, Merchant, StaffProfile, CustomerProfile])],
   controllers: [QrCodesController],
   providers: [QrCodesService],
   exports: [QrCodesService, TypeOrmModule],
