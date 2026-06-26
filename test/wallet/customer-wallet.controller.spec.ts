@@ -7,6 +7,10 @@ import { WalletService } from '../../src/wallet/wallet.service';
 import { CustomerService } from '../../src/customer/customer.service';
 import { TipsService } from '../../src/tips/tips.service';
 import { StaffProfile } from '../../src/staff/entities/staff-profile.entity';
+import { User } from '../../src/auth/entities/user.entity';
+import { Payment } from '../../src/payments/entities/payment.entity';
+import { ConfigService } from '@nestjs/config';
+import { PAYMENT_PROVIDER } from '../../src/payments/providers/providers.constants';
 import { Role } from '../../src/auth/enums/role.enum';
 
 describe('CustomerWalletController', () => {
@@ -34,6 +38,25 @@ describe('CustomerWalletController', () => {
 
   const mockStaffProfileRepo = {
     findOne: jest.fn(),
+  };
+
+  const mockPaymentProvider = {
+    initializeTransaction: jest.fn(),
+    verifyTransaction: jest.fn(),
+    handleWebhook: jest.fn(),
+    verifyWebhookSignature: jest.fn(),
+  };
+
+  const mockPaymentRepo = {
+    findOne: jest.fn(),
+  };
+
+  const mockUserRepo = {
+    findOne: jest.fn(),
+  };
+
+  const mockConfigService = {
+    get: jest.fn((key: string, defaultValue: string) => defaultValue),
   };
 
   const mockJwtService = {
@@ -125,12 +148,28 @@ describe('CustomerWalletController', () => {
           useValue: mockStaffProfileRepo,
         },
         {
+          provide: PAYMENT_PROVIDER,
+          useValue: mockPaymentProvider,
+        },
+        {
+          provide: getRepositoryToken(Payment),
+          useValue: mockPaymentRepo,
+        },
+        {
+          provide: getRepositoryToken(User),
+          useValue: mockUserRepo,
+        },
+        {
           provide: Reflector,
           useValue: { get: jest.fn() },
         },
         {
           provide: JwtService,
           useValue: mockJwtService,
+        },
+        {
+          provide: ConfigService,
+          useValue: mockConfigService,
         },
       ],
     }).compile();
@@ -159,36 +198,32 @@ describe('CustomerWalletController', () => {
   });
 
   describe('POST /customer/wallet/deposit', () => {
-    it('should deposit funds to customer wallet', async () => {
+    it('should initiate a Paystack deposit and return authorization URL', async () => {
       mockCustomerService.getOrCreateProfile.mockResolvedValue(mockCustomerProfile);
       mockWalletService.getOrCreateCustomerWallet.mockResolvedValue(mockWallet);
-      mockWalletService.deposit.mockResolvedValue({
-        wallet: { ...mockWallet, balanceAvailable: 2000 },
-        transaction: {
-          id: 'tx-uuid',
-          walletId: 'wallet-uuid',
-          type: 1,
-          amount: 1000,
-          fee: 0,
-          reference: 'DEP-001',
-          description: 'Pre-funding',
-          transactionStatus: 2,
-          status: 1,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
+      mockUserRepo.findOne.mockResolvedValue({ id: 'user-uuid', email: 'user@example.com' });
+      mockPaymentProvider.initializeTransaction.mockResolvedValue({
+        authorizationUrl: 'https://checkout.paystack.com/abc123',
+        reference: 'TXT-1712345678-abc',
       });
 
-      const dto = { amount: 1000, reference: 'DEP-001', description: 'Pre-funding' };
+      const dto = { amount: 1000 };
       const result = await controller.deposit(mockUser, dto);
 
       expect(result.status).toBe('success');
-      expect(result.data.wallet.balanceAvailable).toBe(2000);
-      expect(mockWalletService.deposit).toHaveBeenCalledWith(mockUser, {
-        walletId: 'wallet-uuid',
+      expect(result.data.authorizationUrl).toBe('https://checkout.paystack.com/abc123');
+      expect(result.data.reference).toBe('TXT-1712345678-abc');
+      expect(mockCustomerService.getOrCreateProfile).toHaveBeenCalledWith('user-uuid');
+      expect(mockWalletService.getOrCreateCustomerWallet).toHaveBeenCalledWith('customer-profile-uuid');
+      expect(mockUserRepo.findOne).toHaveBeenCalledWith({ where: { id: 'user-uuid' } });
+      expect(mockPaymentProvider.initializeTransaction).toHaveBeenCalledWith({
+        email: 'user@example.com',
         amount: 1000,
-        reference: 'DEP-001',
-        description: 'Pre-funding',
+        callbackUrl: 'https://app.taktip.com/wallet/deposit/callback',
+        metadata: {
+          walletId: 'wallet-uuid',
+          deposit: true,
+        },
       });
     });
   });

@@ -18,6 +18,9 @@ import { Tip } from '../../../tips/entities/tip.entity';
 import { TipStatus } from '../../../tips/enums/tip-status.enum';
 import { TipSource } from '../../../tips/enums/tip-source.enum';
 import { Wallet } from '../../../wallet/entities/wallet.entity';
+import { Transaction } from '../../../wallet/entities/transaction.entity';
+import { TransactionType } from '../../../wallet/enums/transaction-type.enum';
+import { TransactionStatus } from '../../../wallet/enums/transaction-status.enum';
 import { CustomerProfile } from '../../../customer/entities/customer-profile.entity';
 import { User } from '../../../auth/entities/user.entity';
 import { MailService } from '../../../auth/services/mail.service';
@@ -36,6 +39,8 @@ export class PaystackProvider implements PaymentProvider {
     private readonly tipRepository: Repository<Tip>,
     @InjectRepository(Wallet)
     private readonly walletRepository: Repository<Wallet>,
+    @InjectRepository(Transaction)
+    private readonly transactionRepository: Repository<Transaction>,
     @InjectRepository(CustomerProfile)
     private readonly customerProfileRepository: Repository<CustomerProfile>,
     @InjectRepository(User)
@@ -64,6 +69,8 @@ export class PaystackProvider implements PaymentProvider {
   ): Promise<InitializeTransactionResult> {
     const reference = params.reference || this.generateReference();
     const appUrl = this.configService.get<string>('APP_URL', 'https://app.taktip.com');
+    const callbackUrl =
+      params.callbackUrl ?? `${appUrl}/tip/callback`;
     const amountInKobo = Math.round(params.amount * 100);
 
     // Log the intent (before the API call)
@@ -76,7 +83,7 @@ export class PaystackProvider implements PaymentProvider {
         amount: amountInKobo,
         reference,
         metadata: params.metadata || {},
-        callback_url: `${appUrl}/tip/callback`,
+        callback_url: callbackUrl,
       });
 
       this.logger.log(`Paystack transaction initialized: ${reference}`);
@@ -321,6 +328,42 @@ export class PaystackProvider implements PaymentProvider {
         this.logger.warn(`Tip not found for id: ${payment.tipId}`);
       }
     }
+
+    // ── Wallet deposit: credit balance_available directly ──
+    const metadata = payment.metadata;
+    if (metadata?.deposit === true && metadata?.walletId) {
+      const walletId = metadata.walletId as string;
+      const amount = payment.amount;
+
+      // Credit balance_available (no pending — it's the customer's own money)
+      await this.walletRepository.manager.query(
+        'UPDATE "wallets" SET "balance_available" = CAST("balance_available" AS numeric(15,2)) + $1 WHERE "id" = $2',
+        [amount, walletId],
+      );
+
+      this.logger.log(`Deposit: credited ${amount} to balance_available of wallet ${walletId}`);
+
+      // Fetch wallet to capture balance_before / balance_after
+      const wallet = await this.walletRepository.findOne({ where: { id: walletId } });
+      const balanceAfter = wallet?.balanceAvailable ?? amount;
+      const balanceBefore = balanceAfter - amount;
+
+      // Create a DEPOSIT transaction record
+      const tx = this.transactionRepository.create({
+        walletId,
+        type: TransactionType.DEPOSIT,
+        amount,
+        fee: 0,
+        reference: payment.reference,
+        description: 'Wallet deposit via Paystack',
+        transactionStatus: TransactionStatus.COMPLETED,
+        balanceBefore,
+        balanceAfter,
+      });
+      await this.transactionRepository.save(tx);
+
+      this.logger.log(`Deposit transaction ${tx.id} created for wallet ${walletId} (ref: ${payment.reference})`);
+    }
   }
 
   private async handleChargeFailed(
@@ -426,9 +469,11 @@ export class PaystackProvider implements PaymentProvider {
    * @see https://paystack.com/docs/payments/webhooks/#verify-event-origin-with-signature-validation
    */
   verifyWebhookSignature(signature: string, rawBody: string): boolean {
-    const secret = this.configService.get<string>('PAYSTACK_WEBHOOK_SECRET', '');
+    // Paystack signs webhooks with your API Secret Key, NOT a separate webhook secret
+    // See: https://paystack.com/docs/payments/webhooks/#verify-event-origin-with-signature-validation
+    const secret = this.configService.get<string>('PAYSTACK_SECRET_KEY', '');
     if (!secret) {
-      this.logger.error('PAYSTACK_WEBHOOK_SECRET is not configured');
+      this.logger.error('PAYSTACK_SECRET_KEY is not configured for webhook verification');
       return false;
     }
 

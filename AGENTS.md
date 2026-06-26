@@ -184,7 +184,44 @@ async updateMerchant(
 
 ---
 
-## 6. Naming Conventions
+## 6. Decimal Columns & String Concatenation Gotcha
+
+### The Issue
+Postgres `DECIMAL` / `NUMERIC` columns are returned as **strings** by the `pg` driver (JavaScript's `Number` can't safely represent arbitrary precision). When you use `+` on a string like `"1520.00"`, it performs **string concatenation** instead of numeric addition:
+
+```typescript
+const bal = wallet.balanceAvailable; // "1520.00" (string!)
+const total = bal + 9.5;             // "1520.009.5" 😱
+// Postgres then throws: invalid input syntax for type numeric: "1520.009.5"
+```
+
+### The Fix
+Always add a `ValueTransformer` to `decimal` columns that converts strings to numbers on read:
+
+```typescript
+import { ValueTransformer } from 'typeorm';
+
+const decimalTransformer: ValueTransformer = {
+  to: (value: number | null | undefined): number | null | undefined => value,
+  from: (value: string | null): number | null =>
+    value !== null ? parseFloat(value) : null,
+};
+
+// Usage
+@Column({ type: 'decimal', precision: 15, scale: 2, transformer: decimalTransformer })
+balanceAvailable: number;
+```
+
+### Affected Entities
+- `wallet.entity.ts` — `balancePending`, `balanceAvailable`, `balanceProcessing`
+- `transaction.entity.ts` — `amount`, `fee`, `balanceBefore`, `balanceAfter`
+
+### Raw SQL is safe
+Raw queries with `CAST("balance" AS numeric(15,2)) + $1` work fine because the arithmetic happens in Postgres, not JavaScript. Only TypeORM reads (`.find()`, `.findOne()`) are affected.
+
+---
+
+## 7. Naming Conventions
 
 ### API Documentation Alignment
 When the API documentation (PDF) specifies a name (e.g., "Merchant"), use that name in code rather than generic terms like "Business":

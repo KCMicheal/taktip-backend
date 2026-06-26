@@ -5,7 +5,7 @@
 # Prerequisites:
 #   - Docker containers running (postgres + redis): docker compose up -d
 #   - Migrations applied:                       pnpm run migration:run
-#   - .env file with PAYSTACK_SECRET_KEY and PAYSTACK_WEBHOOK_SECRET
+#   - .env file with PAYSTACK_SECRET_KEY
 #
 # What it does:
 #   1. Starts the NestJS app in background, captures logs
@@ -554,14 +554,16 @@ step_04_guest_tip() {
 
   # D2. Simulate Paystack Webhook (charge.success)
   # Generate HMAC-SHA512 signature (per Paystack official spec)
-  PAYSTACK_WEBHOOK_SECRET=$(grep PAYSTACK_WEBHOOK_SECRET .env 2>/dev/null | cut -d= -f2- | tr -d "\"'" | xargs || echo "")
-  if [ -n "$PAYSTACK_WEBHOOK_SECRET" ]; then
+  # Paystack signs webhooks with PAYSTACK_SECRET_KEY, NOT a separate webhook secret.
+  # See: https://paystack.com/docs/payments/webhooks/#verify-event-origin-with-signature-validation
+  PAYSTACK_SIGNING_KEY=$(grep PAYSTACK_SECRET_KEY .env 2>/dev/null | cut -d= -f2- | tr -d "\"'" | xargs || echo "")
+  if [ -n "$PAYSTACK_SIGNING_KEY" ]; then
     log "Simulating Paystack webhook with HMAC-SHA512 signature…"
 
     WEBHOOK_PAYLOAD="{\"event\":\"charge.success\",\"data\":{\"reference\":\"${PAYMENT_REFERENCE}\",\"status\":\"success\",\"amount\":50000,\"currency\":\"NGN\"}}"
 
     # Generate HMAC-SHA512 signature (raw bytes → hex)
-    WEBHOOK_SIGNATURE=$(echo -n "$WEBHOOK_PAYLOAD" | openssl dgst -sha512 -hmac "$PAYSTACK_WEBHOOK_SECRET" | sed 's/^.* //')
+    WEBHOOK_SIGNATURE=$(echo -n "$WEBHOOK_PAYLOAD" | openssl dgst -sha512 -hmac "$PAYSTACK_SIGNING_KEY" | sed 's/^.* //')
 
     # Send webhook with signature header
     RESPONSE=$(curl -sS -X POST "${BASE_URL}/payments/webhook" \
@@ -579,12 +581,12 @@ step_04_guest_tip() {
       ok "Webhook with HMAC signature accepted"
     else
       warn "Webhook returned HTTP $http_code"
-      log "  Verify PAYSTACK_WEBHOOK_SECRET in .env matches what Paystack would send"
+      log "  Verify PAYSTACK_SECRET_KEY in .env matches your Paystack API secret key"
       log "  Response: $(echo "$RESPONSE" | head -c 150)"
     fi
   else
-    warn "PAYSTACK_WEBHOOK_SECRET not set — skipping webhook simulation"
-    log "  Set PAYSTACK_WEBHOOK_SECRET in .env and re-run"
+    warn "PAYSTACK_SECRET_KEY not set — skipping webhook simulation"
+    log "  Set PAYSTACK_SECRET_KEY in .env and re-run"
   fi
 }
 

@@ -23,6 +23,11 @@ export interface InitializeTransactionParams {
   currency?: string;
   /** Arbitrary metadata forwarded to the provider */
   metadata?: Record<string, unknown>;
+  /**
+   * Full callback URL for redirect after payment.
+   * If omitted, the provider uses a default (e.g., APP_URL + '/tip/callback').
+   */
+  callbackUrl?: string;
 }
 
 export interface InitializeTransactionResult {

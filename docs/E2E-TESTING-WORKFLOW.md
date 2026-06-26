@@ -308,7 +308,7 @@ pnpm install
 
 # Create .env if not present
 cp -n .env.example .env
-# ⚠️ Edit .env with your PAYSTACK_SECRET_KEY, PAYSTACK_WEBHOOK_SECRET, etc.
+# ⚠️ Edit .env with your PAYSTACK_SECRET_KEY, etc.
 
 # Run migrations (creates tables)
 pnpm run migration:run
@@ -482,11 +482,8 @@ Forwarding  https://abc123.ngrok-free.app → http://localhost:3001
    https://abc123.ngrok-free.app/api/v1/payments/webhook
    ```
 4. Enable events: `charge.success`, `charge.failed`
-5. Copy the **Webhook Secret** from Paystack dashboard
-6. Add it to your `.env`:
-   ```
-   PAYSTACK_WEBHOOK_SECRET=whsec_your_secret_from_paystack
-   ```
+5. **No separate webhook secret needed** — Paystack signs webhooks using your **API Secret Key** (`PAYSTACK_SECRET_KEY`). It is already configured in `.env`.
+   > See: https://paystack.com/docs/payments/webhooks/#verify-event-origin-with-signature-validation
 
 ### Step 4: Test the Full Payment Flow
 
@@ -535,7 +532,7 @@ curl http://localhost:3001/api/v1/payments/webhook \
 # Check ngrok dashboard: http://localhost:4040
 
 # Common issues:
-# - PAYSTACK_WEBHOOK_SECRET mismatch → "signature verification failed"
+# - PAYSTACK_SECRET_KEY mismatch → "signature verification failed"
 # - Ngrok URL changed → update Paystack dashboard
 # - Reference not found → Payment already processed or wrong reference
 ```
@@ -797,7 +794,7 @@ jobs:
 DATABASE_URL=postgresql://taktip:devpassword@localhost:5432/taktip_dev
 REDIS_URL=redis://localhost:6379
 PAYSTACK_SECRET_KEY=sk_test_xxxxxxxxxxxxx
-PAYSTACK_WEBHOOK_SECRET=whsec_xxxxxxxxxxxxx
+# Webhook HMAC uses PAYSTACK_SECRET_KEY (no separate webhook secret)
 APP_URL=http://localhost:3001
 ```
 
