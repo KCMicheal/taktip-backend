@@ -81,7 +81,7 @@ export class CustomerTipsController {
   }
 
   @Get('history')
-  @ApiOperation({ summary: "Get the current customer's C2C tip history" })
+  @ApiOperation({ summary: "Get the current customer's tip history (staff tips + C2C, enriched with names)" })
   @ApiQuery({
     name: 'page',
     required: false,
@@ -94,7 +94,86 @@ export class CustomerTipsController {
     type: Number,
     description: 'Items per page (default: 20, max: 100)',
   })
-  @ApiResponse({ status: 200, description: 'Paginated sent/received tips' })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated sent/received tips with sender, recipient, and merchant names',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            sent: {
+              type: 'object',
+              properties: {
+                items: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      id: { type: 'string', format: 'uuid' },
+                      amount: { type: 'number', example: 500 },
+                      currency: { type: 'string', example: 'NGN' },
+                      message: { type: 'string', nullable: true },
+                      rating: { type: 'number', nullable: true },
+                      createdAt: { type: 'string', format: 'date-time' },
+                      senderName: { type: 'string', example: 'John Doe' },
+                      recipientName: { type: 'string', example: 'Jane Staff' },
+                      merchantName: { type: 'string', example: 'Acme Corp' },
+                      merchantId: { type: 'string', format: 'uuid' },
+                      staffProfileId: { type: 'string', format: 'uuid' },
+                      customerProfileId: { type: 'string', format: 'uuid', nullable: true },
+                      qrCodeId: { type: 'string', format: 'uuid', nullable: true },
+                      source: { type: 'number', example: 1 },
+                      tipStatus: { type: 'number', example: 2 },
+                      recipientType: { type: 'string', nullable: true, example: 'customer' },
+                    },
+                  },
+                },
+                total: { type: 'number', example: 42 },
+                page: { type: 'number', example: 1 },
+                limit: { type: 'number', example: 20 },
+              },
+            },
+            received: {
+              type: 'object',
+              properties: {
+                items: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      id: { type: 'string', format: 'uuid' },
+                      amount: { type: 'number', example: 500 },
+                      currency: { type: 'string', example: 'NGN' },
+                      message: { type: 'string', nullable: true },
+                      rating: { type: 'number', nullable: true },
+                      createdAt: { type: 'string', format: 'date-time' },
+                      senderName: { type: 'string', example: 'John Doe' },
+                      recipientName: { type: 'string', example: 'Jane Customer' },
+                      merchantName: { type: 'string', nullable: true },
+                      merchantId: { type: 'string', format: 'uuid', nullable: true },
+                      staffProfileId: { type: 'string', format: 'uuid' },
+                      customerProfileId: { type: 'string', format: 'uuid', nullable: true },
+                      qrCodeId: { type: 'string', format: 'uuid', nullable: true },
+                      source: { type: 'number', example: 3 },
+                      tipStatus: { type: 'number', example: 2 },
+                      recipientType: { type: 'string', example: 'customer' },
+                    },
+                  },
+                },
+                total: { type: 'number', example: 10 },
+                page: { type: 'number', example: 1 },
+                limit: { type: 'number', example: 20 },
+              },
+            },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 403, description: 'Access denied: Customer role required' })
   async getMyTipHistory(
     @CurrentUser() user: { sub: string; role: Role },
     @Query() query: PaginationParamsDto,

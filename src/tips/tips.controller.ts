@@ -140,7 +140,7 @@ export class TipsController {
   @ApiQuery({ name: 'merchantId', required: false, description: 'Merchant UUID to disambiguate staff profile' })
   @ApiResponse({
     status: 200,
-    description: 'Paginated tips list for the staff member',
+    description: 'Paginated tips list for the staff member with sender/recipient names',
     schema: {
       type: 'object',
       properties: {
@@ -148,11 +148,33 @@ export class TipsController {
         data: {
           type: 'object',
           properties: {
-            tips: {
+            items: {
               type: 'array',
-              items: { $ref: '#/components/schemas/TipResponseDto' },
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                  amount: { type: 'number', example: 500 },
+                  currency: { type: 'string', example: 'NGN' },
+                  message: { type: 'string', nullable: true },
+                  rating: { type: 'number', nullable: true },
+                  createdAt: { type: 'string', format: 'date-time' },
+                  senderName: { type: 'string', example: 'John Doe' },
+                  recipientName: { type: 'string', example: 'Jane Staff' },
+                  merchantName: { type: 'string', example: 'Acme Corp' },
+                  merchantId: { type: 'string', format: 'uuid' },
+                  staffProfileId: { type: 'string', format: 'uuid' },
+                  customerProfileId: { type: 'string', format: 'uuid', nullable: true },
+                  qrCodeId: { type: 'string', format: 'uuid', nullable: true },
+                  source: { type: 'number', example: 1 },
+                  tipStatus: { type: 'number', example: 2 },
+                  recipientType: { type: 'string', nullable: true, example: 'customer' },
+                },
+              },
             },
             total: { type: 'number', example: 42 },
+            page: { type: 'number', example: 1 },
+            limit: { type: 'number', example: 20 },
           },
         },
       },
@@ -239,13 +261,13 @@ export class TipsController {
 
   @Get('merchant/staff/:staffId/tips')
   @Roles(Role.MERCHANT)
-  @ApiOperation({ summary: 'View tips for a specific staff member' })
+  @ApiOperation({ summary: 'View tips for a specific staff member (with sender names)' })
   @ApiParam({ name: 'staffId', description: 'Staff profile UUID' })
   @ApiQuery({ name: 'page', required: false, example: 1, description: 'Page number' })
   @ApiQuery({ name: 'limit', required: false, example: 20, description: 'Items per page' })
   @ApiResponse({
     status: 200,
-    description: 'Paginated tips for the staff member',
+    description: 'Paginated tips for the staff member with sender names',
     schema: {
       type: 'object',
       properties: {
@@ -264,6 +286,16 @@ export class TipsController {
                   message: { type: 'string', nullable: true },
                   rating: { type: 'number', nullable: true },
                   createdAt: { type: 'string', format: 'date-time' },
+                  senderName: { type: 'string', example: 'John Doe' },
+                  recipientName: { type: 'string', example: 'Jane Staff' },
+                  merchantName: { type: 'string', example: 'Acme Corp' },
+                  merchantId: { type: 'string', format: 'uuid' },
+                  staffProfileId: { type: 'string', format: 'uuid' },
+                  customerProfileId: { type: 'string', format: 'uuid', nullable: true },
+                  qrCodeId: { type: 'string', format: 'uuid', nullable: true },
+                  source: { type: 'number', example: 1 },
+                  tipStatus: { type: 'number', example: 2 },
+                  recipientType: { type: 'string', nullable: true, example: 'customer' },
                 },
               },
             },

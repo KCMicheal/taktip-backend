@@ -5,9 +5,10 @@ import { TipsService } from './tips.service';
 import { Tip } from './entities/tip.entity';
 import { StaffProfile } from '../staff/entities/staff-profile.entity';
 import { Merchant } from '../merchant/entities/merchant.entity';
+import { CustomerProfile } from '../customer/entities/customer-profile.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Tip, StaffProfile, Merchant])],
+  imports: [TypeOrmModule.forFeature([Tip, StaffProfile, Merchant, CustomerProfile])],
   controllers: [TipsController],
   providers: [TipsService],
   exports: [TipsService, TypeOrmModule],

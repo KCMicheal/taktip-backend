@@ -6,11 +6,16 @@ import { Tip } from '../../src/tips/entities/tip.entity';
 import { TipSource } from '../../src/tips/enums/tip-source.enum';
 import { TipStatus } from '../../src/tips/enums/tip-status.enum';
 import { StaffProfile } from '../../src/staff/entities/staff-profile.entity';
+import { CustomerProfile } from '../../src/customer/entities/customer-profile.entity';
+import { Merchant } from '../../src/merchant/entities/merchant.entity';
+import { User } from '../../src/auth/entities/user.entity';
 
 describe('TipsService', () => {
   let service: TipsService;
   let tipRepository: Repository<Tip>;
   let staffProfileRepository: Repository<StaffProfile>;
+  let customerProfileRepository: Repository<CustomerProfile>;
+  let merchantRepository: Repository<Merchant>;
 
   const mockTipRepository = {
     create: jest.fn(),
@@ -24,6 +29,36 @@ describe('TipsService', () => {
     findOne: jest.fn(),
     findBy: jest.fn(),
     find: jest.fn(),
+  };
+
+  const mockCustomerProfileRepository = {
+    find: jest.fn(),
+    findBy: jest.fn(),
+    findOne: jest.fn(),
+  };
+
+  const mockMerchantRepository = {
+    find: jest.fn(),
+    findOne: jest.fn(),
+    findBy: jest.fn(),
+  };
+
+  const createMockUser = (overrides: Partial<User> = {}): User => {
+    const user = new User();
+    Object.assign(user, {
+      id: 'user-uuid',
+      email: 'staff@example.com',
+      firstName: 'John',
+      lastName: 'Doe',
+      passwordHash: 'hash',
+      role: 3,
+      isEmailVerified: true,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...overrides,
+    });
+    return user;
   };
 
   const createMockTip = (overrides: Partial<Tip> = {}): Tip => {
@@ -41,7 +76,11 @@ describe('TipsService', () => {
       source: TipSource.GUEST,
       tipStatus: TipStatus.COMPLETED,
       qrCodeId: null,
-      status: 'ACTIVE',
+      senderId: null,
+      senderType: null,
+      recipientType: null,
+      fundingSource: null,
+      senderWalletId: null,
       createdAt: new Date('2024-01-01T12:00:00Z'),
       updatedAt: new Date('2024-01-01T12:00:00Z'),
       ...overrides,
@@ -49,16 +88,29 @@ describe('TipsService', () => {
     return tip;
   };
 
-  const createMockProfile = (overrides: Partial<StaffProfile> = {}): StaffProfile => {
+  const createMockStaffProfile = (overrides: Partial<StaffProfile> = {}): StaffProfile => {
     const profile = new StaffProfile();
     Object.assign(profile, {
       id: 'staff-uuid',
       userId: 'user-uuid',
       merchantId: 'merchant-uuid',
       displayName: 'John Doe',
+      user: createMockUser(),
       ...overrides,
     });
     return profile;
+  };
+
+  const createMockMerchant = (overrides: Partial<Merchant> = {}): Merchant => {
+    const merchant = new Merchant();
+    Object.assign(merchant, {
+      id: 'merchant-uuid',
+      name: 'Test Merchant',
+      shortCode: 'TEST',
+      ownerId: 'owner-uuid',
+      ...overrides,
+    });
+    return merchant;
   };
 
   beforeEach(async () => {
@@ -73,6 +125,14 @@ describe('TipsService', () => {
           provide: getRepositoryToken(StaffProfile),
           useValue: mockStaffProfileRepository,
         },
+        {
+          provide: getRepositoryToken(CustomerProfile),
+          useValue: mockCustomerProfileRepository,
+        },
+        {
+          provide: getRepositoryToken(Merchant),
+          useValue: mockMerchantRepository,
+        },
       ],
     }).compile();
 
@@ -80,6 +140,12 @@ describe('TipsService', () => {
     tipRepository = module.get<Repository<Tip>>(getRepositoryToken(Tip));
     staffProfileRepository = module.get<Repository<StaffProfile>>(
       getRepositoryToken(StaffProfile),
+    );
+    customerProfileRepository = module.get<Repository<CustomerProfile>>(
+      getRepositoryToken(CustomerProfile),
+    );
+    merchantRepository = module.get<Repository<Merchant>>(
+      getRepositoryToken(Merchant),
     );
 
     jest.clearAllMocks();
@@ -177,11 +243,16 @@ describe('TipsService', () => {
         createMockTip({ id: 'tip-2', createdAt: new Date('2024-01-01') }),
       ];
       mockTipRepository.findAndCount.mockResolvedValue([tips, 2]);
+      mockStaffProfileRepository.find.mockResolvedValue([createMockStaffProfile()]);
+      mockCustomerProfileRepository.find.mockResolvedValue([]);
+      mockMerchantRepository.find.mockResolvedValue([createMockMerchant()]);
 
       const result = await service.findByStaff('staff-uuid', 1, 20);
 
-      expect(result.tips).toHaveLength(2);
+      expect(result.items).toHaveLength(2);
       expect(result.total).toBe(2);
+      expect(result.page).toBe(1);
+      expect(result.limit).toBe(20);
       expect(mockTipRepository.findAndCount).toHaveBeenCalledWith({
         where: { staffProfileId: 'staff-uuid' },
         order: { createdAt: 'DESC' },
@@ -192,6 +263,9 @@ describe('TipsService', () => {
 
     it('should paginate correctly', async () => {
       mockTipRepository.findAndCount.mockResolvedValue([[], 0]);
+      mockStaffProfileRepository.find.mockResolvedValue([]);
+      mockCustomerProfileRepository.find.mockResolvedValue([]);
+      mockMerchantRepository.find.mockResolvedValue([]);
 
       await service.findByStaff('staff-uuid', 2, 10);
 
@@ -208,15 +282,29 @@ describe('TipsService', () => {
 
       const result = await service.findByStaff('staff-uuid');
 
-      expect(result.tips).toEqual([]);
+      expect(result.items).toEqual([]);
       expect(result.total).toBe(0);
+    });
+
+    it('should enrich guest tips with senderName "Guest"', async () => {
+      const tips = [createMockTip({ id: 'tip-1' })];
+      mockTipRepository.findAndCount.mockResolvedValue([tips, 1]);
+      mockStaffProfileRepository.find.mockResolvedValue([createMockStaffProfile()]);
+      mockCustomerProfileRepository.find.mockResolvedValue([]);
+      mockMerchantRepository.find.mockResolvedValue([createMockMerchant()]);
+
+      const result = await service.findByStaff('staff-uuid');
+
+      expect(result.items[0].senderName).toBe('Guest');
+      expect(result.items[0].recipientName).toBe('John Doe');
+      expect(result.items[0].merchantName).toBe('Test Merchant');
     });
   });
 
   // ───────── findByMerchant ─────────
 
   describe('findByMerchant', () => {
-    it('should return paginated tips enriched with staff names', async () => {
+    it('should return paginated tips enriched with names', async () => {
       const tips = [
         createMockTip({
           id: 'tip-1',
@@ -233,23 +321,24 @@ describe('TipsService', () => {
       ];
 
       const staffProfiles = [
-        createMockProfile({ id: 'staff-1', displayName: 'Alice' }),
-        createMockProfile({ id: 'staff-2', displayName: 'Bob' }),
+        createMockStaffProfile({ id: 'staff-1', displayName: 'Alice' }),
+        createMockStaffProfile({ id: 'staff-2', displayName: 'Bob' }),
       ];
 
       mockTipRepository.findAndCount.mockResolvedValue([tips, 2]);
-      mockStaffProfileRepository.findBy.mockResolvedValue(staffProfiles);
+      mockStaffProfileRepository.find.mockResolvedValue(staffProfiles);
+      mockCustomerProfileRepository.find.mockResolvedValue([]);
+      mockMerchantRepository.find.mockResolvedValue([createMockMerchant()]);
 
       const result = await service.findByMerchant('merchant-uuid', 1, 20);
 
       expect(result.total).toBe(2);
-      expect(result.tips).toHaveLength(2);
-      expect(result.tips[0].staffName).toBe('Alice');
-      expect(result.tips[0].amount).toBe(500);
-      expect(result.tips[1].staffName).toBe('Bob');
-      expect(result.tips[1].message).toBe('Thanks!');
-      expect(result.tips[1].rating).toBe(4);
-      expect(mockStaffProfileRepository.findBy).toHaveBeenCalledTimes(1);
+      expect(result.items).toHaveLength(2);
+      expect(result.items[0].recipientName).toBe('Alice');
+      expect(result.items[0].amount).toBe(500);
+      expect(result.items[1].recipientName).toBe('Bob');
+      expect(result.items[1].message).toBe('Thanks!');
+      expect(result.items[1].rating).toBe(4);
     });
 
     it('should handle staff profiles not found gracefully', async () => {
@@ -258,21 +347,53 @@ describe('TipsService', () => {
       ];
 
       mockTipRepository.findAndCount.mockResolvedValue([tips, 1]);
-      mockStaffProfileRepository.findBy.mockResolvedValue([]);
+      mockStaffProfileRepository.find.mockResolvedValue([]);
+      mockCustomerProfileRepository.find.mockResolvedValue([]);
+      mockMerchantRepository.find.mockResolvedValue([createMockMerchant()]);
 
       const result = await service.findByMerchant('merchant-uuid');
 
-      expect(result.tips[0].staffName).toBe('Unknown Staff');
+      expect(result.items[0].recipientName).toBe('Unknown');
     });
 
     it('should return empty result for merchant with no tips', async () => {
       mockTipRepository.findAndCount.mockResolvedValue([[], 0]);
-      mockStaffProfileRepository.findBy.mockResolvedValue([]);
+      mockStaffProfileRepository.find.mockResolvedValue([]);
+      mockCustomerProfileRepository.find.mockResolvedValue([]);
+      mockMerchantRepository.find.mockResolvedValue([]);
 
       const result = await service.findByMerchant('merchant-uuid');
 
-      expect(result.tips).toEqual([]);
+      expect(result.items).toEqual([]);
       expect(result.total).toBe(0);
+    });
+
+    it('should add senderName for wallet-funded tips with customerProfileId', async () => {
+      const customerUser = createMockUser({ id: 'customer-user-id', firstName: 'Jane', lastName: 'Customer' });
+      const customerProfile = new CustomerProfile();
+      Object.assign(customerProfile, {
+        id: 'customer-uuid',
+        userId: 'customer-user-id',
+        displayName: null,
+        user: customerUser,
+      });
+
+      const tips = [
+        createMockTip({
+          id: 'tip-1',
+          customerProfileId: 'customer-uuid',
+          source: TipSource.WALLET,
+        }),
+      ];
+
+      mockTipRepository.findAndCount.mockResolvedValue([tips, 1]);
+      mockStaffProfileRepository.find.mockResolvedValue([createMockStaffProfile()]);
+      mockCustomerProfileRepository.find.mockResolvedValue([customerProfile]);
+      mockMerchantRepository.find.mockResolvedValue([createMockMerchant()]);
+
+      const result = await service.findByMerchant('merchant-uuid');
+
+      expect(result.items[0].senderName).toBe('Jane');
     });
   });
 
