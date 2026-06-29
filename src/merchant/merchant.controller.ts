@@ -28,13 +28,13 @@ export class MerchantController {
   @Get('tips')
   @UseGuards(RolesGuard)
   @Roles(Role.MERCHANT)
-  @ApiOperation({ summary: 'Get all tips for the authenticated merchant (paginated, with staff names)' })
+  @ApiOperation({ summary: 'Get all tips for the authenticated merchant (paginated, with sender/recipient/merchant names)' })
   @ApiQuery({ name: 'page', required: false, example: 1, description: 'Page number' })
   @ApiQuery({ name: 'limit', required: false, example: 20, description: 'Items per page' })
   @ApiQuery({ name: 'merchantId', required: false, description: 'Merchant UUID (resolved from user if omitted)' })
   @ApiResponse({
     status: 200,
-    description: 'Paginated tips list with staff names',
+    description: 'Paginated tips with sender/recipient names',
     schema: {
       type: 'object',
       properties: {
@@ -42,11 +42,33 @@ export class MerchantController {
         data: {
           type: 'object',
           properties: {
-            tips: {
+            items: {
               type: 'array',
-              items: { $ref: '#/components/schemas/TipResponseDto' },
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                  amount: { type: 'number', example: 500 },
+                  currency: { type: 'string', example: 'NGN' },
+                  message: { type: 'string', nullable: true },
+                  rating: { type: 'number', nullable: true },
+                  createdAt: { type: 'string', format: 'date-time' },
+                  senderName: { type: 'string', example: 'John Doe' },
+                  recipientName: { type: 'string', example: 'Jane Staff' },
+                  merchantName: { type: 'string', example: 'Acme Corp' },
+                  merchantId: { type: 'string', format: 'uuid' },
+                  staffProfileId: { type: 'string', format: 'uuid' },
+                  customerProfileId: { type: 'string', format: 'uuid', nullable: true },
+                  qrCodeId: { type: 'string', format: 'uuid', nullable: true },
+                  source: { type: 'number', example: 1 },
+                  tipStatus: { type: 'number', example: 2 },
+                  recipientType: { type: 'string', nullable: true, example: 'customer' },
+                },
+              },
             },
             total: { type: 'number', example: 42 },
+            page: { type: 'number', example: 1 },
+            limit: { type: 'number', example: 20 },
           },
         },
       },

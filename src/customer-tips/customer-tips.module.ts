@@ -4,6 +4,8 @@ import { CustomerTipsService } from './customer-tips.service';
 import { CustomerTipsController } from './customer-tips.controller';
 import { Tip } from '../tips/entities/tip.entity';
 import { CustomerProfile } from '../customer/entities/customer-profile.entity';
+import { StaffProfile } from '../staff/entities/staff-profile.entity';
+import { Merchant } from '../merchant/entities/merchant.entity';
 import { Payment } from '../payments/entities/payment.entity';
 import { Wallet } from '../wallet/entities/wallet.entity';
 import { User } from '../auth/entities/user.entity';
@@ -13,7 +15,7 @@ import { PaymentsModule } from '../payments/payments.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Tip, CustomerProfile, Payment, Wallet, User]),
+    TypeOrmModule.forFeature([Tip, CustomerProfile, StaffProfile, Merchant, Payment, Wallet, User]),
     CustomerModule,
     WalletModule,
     PaymentsModule,

@@ -8,6 +8,8 @@ import { ConfigService } from '@nestjs/config';
 import { MailService } from '../../src/auth/services/mail.service';
 import { Tip } from '../../src/tips/entities/tip.entity';
 import { CustomerProfile } from '../../src/customer/entities/customer-profile.entity';
+import { StaffProfile } from '../../src/staff/entities/staff-profile.entity';
+import { Merchant } from '../../src/merchant/entities/merchant.entity';
 import { Payment } from '../../src/payments/entities/payment.entity';
 import { Wallet } from '../../src/wallet/entities/wallet.entity';
 import { User } from '../../src/auth/entities/user.entity';
@@ -23,6 +25,8 @@ describe('CustomerTipsService', () => {
   let service: CustomerTipsService;
   let tipRepository: Record<string, jest.Mock>;
   let customerProfileRepository: Record<string, jest.Mock>;
+  let staffProfileRepository: Record<string, jest.Mock>;
+  let merchantRepository: Record<string, jest.Mock>;
   let paymentRepository: Record<string, jest.Mock>;
   let walletRepository: Record<string, jest.Mock>;
   let userRepository: Record<string, jest.Mock>;
@@ -121,6 +125,15 @@ describe('CustomerTipsService', () => {
     customerProfileRepository = {
       findOne: jest.fn(),
       createQueryBuilder: jest.fn(),
+      find: jest.fn().mockResolvedValue([]),
+    };
+
+    staffProfileRepository = {
+      find: jest.fn().mockResolvedValue([]),
+    };
+
+    merchantRepository = {
+      find: jest.fn().mockResolvedValue([]),
     };
 
     paymentRepository = {
@@ -164,6 +177,14 @@ describe('CustomerTipsService', () => {
         {
           provide: getRepositoryToken(CustomerProfile),
           useValue: customerProfileRepository,
+        },
+        {
+          provide: getRepositoryToken(StaffProfile),
+          useValue: staffProfileRepository,
+        },
+        {
+          provide: getRepositoryToken(Merchant),
+          useValue: merchantRepository,
         },
         {
           provide: getRepositoryToken(Payment),
@@ -533,7 +554,10 @@ describe('CustomerTipsService', () => {
       expect(tipRepository.findAndCount).toHaveBeenCalledTimes(2);
       // First call: sent tips
       expect(tipRepository.findAndCount).toHaveBeenNthCalledWith(1, {
-        where: { senderId: 'sender-profile-uuid', recipientType: 'customer' },
+        where: [
+          { customerProfileId: 'sender-profile-uuid' },
+          { senderId: 'sender-profile-uuid', recipientType: 'customer' },
+        ],
         order: { createdAt: 'DESC' },
         skip: 0,
         take: 20,
@@ -557,7 +581,10 @@ describe('CustomerTipsService', () => {
       await service.getMyTipHistory(mockUser, { page: 3, limit: 10 });
 
       expect(tipRepository.findAndCount).toHaveBeenNthCalledWith(1, {
-        where: { senderId: 'sender-profile-uuid', recipientType: 'customer' },
+        where: [
+          { customerProfileId: 'sender-profile-uuid' },
+          { senderId: 'sender-profile-uuid', recipientType: 'customer' },
+        ],
         order: { createdAt: 'DESC' },
         skip: 20, // (3 - 1) * 10
         take: 10,

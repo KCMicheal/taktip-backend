@@ -5,11 +5,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { Tip } from '../tips/entities/tip.entity';
-import { TipStatus } from '../tips/enums/tip-status.enum';
 import { TipSource } from '../tips/enums/tip-source.enum';
+import { TipStatus } from '../tips/enums/tip-status.enum';
+import { TipResponseDto } from '../tips/dto/tip-response.dto';
 import { C2cTipFundingSource } from '../tips/enums/c2c-tip-funding-source.enum';
 import { C2cTipSenderType } from '../tips/enums/c2c-tip-sender-type.enum';
 import { CustomerProfile } from '../customer/entities/customer-profile.entity';
@@ -21,6 +22,8 @@ import { Payment } from '../payments/entities/payment.entity';
 import { Role } from '../auth/enums/role.enum';
 import { User } from '../auth/entities/user.entity';
 import { MailService } from '../auth/services/mail.service';
+import { StaffProfile } from '../staff/entities/staff-profile.entity';
+import { Merchant } from '../merchant/entities/merchant.entity';
 import {
   SendCustomerTipDto,
   SearchCustomersQueryDto,
@@ -52,6 +55,10 @@ export class CustomerTipsService {
     private readonly walletRepository: Repository<Wallet>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(StaffProfile)
+    private readonly staffProfileRepository: Repository<StaffProfile>,
+    @InjectRepository(Merchant)
+    private readonly merchantRepository: Repository<Merchant>,
     private readonly customerService: CustomerService,
     private readonly walletService: WalletService,
     private readonly configService: ConfigService,
@@ -291,28 +298,196 @@ export class CustomerTipsService {
     }));
   }
 
+  // ── Name enrichment helpers ──────────────────────────────────────────────
+
   /**
-   * Get C2C tip history for the current customer.
-   * Returns both sent and received tips.
+   * Build a customerProfileId → CustomerProfile lookup map.
+   */
+  private async buildCustomerProfileMap(
+    ids: Set<string>,
+  ): Promise<Map<string, CustomerProfile>> {
+    if (ids.size === 0) return new Map();
+    const profiles = await this.customerProfileRepository.find({
+      where: { id: In([...ids]) },
+      relations: ['user'],
+    });
+    return new Map(profiles.map((p) => [p.id, p]));
+  }
+
+  /**
+   * Build a staffProfileId → StaffProfile lookup map.
+   */
+  private async buildStaffProfileMap(
+    ids: Set<string>,
+  ): Promise<Map<string, StaffProfile>> {
+    if (ids.size === 0) return new Map();
+    const profiles = await this.staffProfileRepository.find({
+      where: { id: In([...ids]) },
+      relations: ['user'],
+    });
+    return new Map(profiles.map((p) => [p.id, p]));
+  }
+
+  /**
+   * Build a merchantId → merchant.name lookup map.
+   */
+  private async buildMerchantNameMap(
+    ids: Set<string>,
+  ): Promise<Map<string, string>> {
+    if (ids.size === 0) return new Map();
+    const merchants = await this.merchantRepository.find({
+      where: { id: In([...ids]) },
+    });
+    return new Map(merchants.map((m) => [m.id, m.name]));
+  }
+
+  /**
+   * Map a raw Tip into an enriched TipResponseDto.
+   *
+   * Rules for senderName / recipientName:
+   * ─────────────────────────────────────────────────────────
+   * | Tip type         | senderName                | recipientName         |
+   * |──────────────────|───────────────────────────|───────────────────────|
+   * | Staff (GUEST)    | "Guest"                   | StaffProfile → name   |
+   * | Staff (WALLET)   | CustomerProfile → name    | StaffProfile → name   |
+   * | C2C              | senderId → Customer       | staffProfileId        |
+   * |                  |   Profile → name          |   → CustomerProfile   |
+   * |                  |                           |   → name              |
+   * ───────────────────────────────────────────────────────────────────────
+   */
+  private tipToDto(
+    tip: Tip,
+    customerProfileMap: Map<string, CustomerProfile>,
+    staffProfileMap: Map<string, StaffProfile>,
+    merchantNameMap: Map<string, string>,
+  ): TipResponseDto {
+    // ── Resolve senderName ──
+    let senderName: string | undefined;
+    if (tip.source === TipSource.CUSTOMER_TO_CUSTOMER) {
+      // C2C tip: senderId identifies the sender
+      if (tip.senderId) {
+        const profile = customerProfileMap.get(tip.senderId);
+        senderName = profile
+          ? profile.displayName || profile.user?.firstName || 'Unknown'
+          : 'Unknown';
+      } else {
+        senderName = 'Unknown';
+      }
+    } else if (!tip.customerProfileId) {
+      // Guest tip (no customer profile)
+      senderName = 'Guest';
+    } else {
+      // Staff tip with registered customer
+      const profile = customerProfileMap.get(tip.customerProfileId);
+      senderName = profile
+        ? profile.displayName || profile.user?.firstName || 'Unknown'
+        : 'Unknown';
+    }
+
+    // ── Resolve recipientName ──
+    let recipientName: string | undefined;
+    if (tip.recipientType === 'customer') {
+      // C2C tip: staffProfileId is repurposed for recipient
+      const profile = customerProfileMap.get(tip.staffProfileId);
+      recipientName = profile
+        ? profile.displayName || profile.user?.firstName || 'Unknown'
+        : 'Unknown';
+    } else {
+      // Staff tip: staffProfileId identifies the staff member
+      const profile = staffProfileMap.get(tip.staffProfileId);
+      if (profile) {
+        recipientName = profile.displayName || profile.user?.firstName || 'Unknown Staff';
+      } else {
+        recipientName = 'Unknown';
+      }
+    }
+
+    return {
+      id: tip.id,
+      amount: Number(tip.amount),
+      currency: tip.currency,
+      message: tip.message || undefined,
+      rating: tip.rating ?? undefined,
+      createdAt: tip.createdAt,
+      senderName,
+      recipientName,
+      merchantName: merchantNameMap.get(tip.merchantId) || undefined,
+      merchantId: tip.merchantId || undefined,
+      staffProfileId: tip.staffProfileId || undefined,
+      customerProfileId: tip.customerProfileId || undefined,
+      qrCodeId: tip.qrCodeId || undefined,
+      source: tip.source,
+      tipStatus: tip.tipStatus,
+      recipientType: tip.recipientType || undefined,
+    };
+  }
+
+  /**
+   * Enrich an array of tips with names and return TipResponseDto[].
+   */
+  private async enrichTips(
+    tips: Tip[],
+  ): Promise<TipResponseDto[]> {
+    if (tips.length === 0) return [];
+
+    // Collect all profile IDs we need to look up
+    const customerProfileIds = new Set<string>();
+    const staffProfileIds = new Set<string>();
+    const merchantIds = new Set<string>();
+
+    for (const t of tips) {
+      if (t.source === TipSource.CUSTOMER_TO_CUSTOMER) {
+        if (t.senderId) customerProfileIds.add(t.senderId);
+        // staffProfileId is the C2C recipient
+        customerProfileIds.add(t.staffProfileId);
+      } else {
+        if (t.customerProfileId) customerProfileIds.add(t.customerProfileId);
+        staffProfileIds.add(t.staffProfileId);
+        if (t.merchantId) merchantIds.add(t.merchantId);
+      }
+    }
+
+    const [customerProfileMap, staffProfileMap, merchantNameMap] = await Promise.all([
+      this.buildCustomerProfileMap(customerProfileIds),
+      this.buildStaffProfileMap(staffProfileIds),
+      this.buildMerchantNameMap(merchantIds),
+    ]);
+
+    return tips.map((t) => this.tipToDto(t, customerProfileMap, staffProfileMap, merchantNameMap));
+  }
+
+  /**
+   * Get tip history for the current customer.
+   *
+   * Returns ALL tips associated with the customer:
+   * - **sent**     — staff tips the customer paid + C2C tips the customer sent
+   * - **received** — C2C tips the customer received
+   *
+   * Items are enriched with human-readable names (senderName, recipientName, merchantName).
    */
   async getMyTipHistory(
     user: { sub: string; role: Role },
     query: PaginationParamsDto,
   ): Promise<{
-    sent: PaginatedResult<Tip>;
-    received: PaginatedResult<Tip>;
+    sent: PaginatedResult<TipResponseDto>;
+    received: PaginatedResult<TipResponseDto>;
   }> {
     const profile = await this.customerService.getByUserId(user.sub);
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
 
+    // ── Sent: staff tips (customerProfileId = me) + C2C tips (senderId = me) ──
     const [sent, totalSent] = await this.tipRepository.findAndCount({
-      where: { senderId: profile.id, recipientType: 'customer' },
+      where: [
+        { customerProfileId: profile.id },
+        { senderId: profile.id, recipientType: 'customer' },
+      ],
       order: { createdAt: 'DESC' },
       skip: this.paginationService.getSkip(page, limit),
       take: limit,
     });
 
+    // ── Received: C2C tips where this customer is the recipient ──
     const [received, totalReceived] = await this.tipRepository.findAndCount({
       where: { staffProfileId: profile.id, recipientType: 'customer' },
       order: { createdAt: 'DESC' },
@@ -320,9 +495,15 @@ export class CustomerTipsService {
       take: limit,
     });
 
+    // Enrich both lists with names in parallel
+    const [enrichedSent, enrichedReceived] = await Promise.all([
+      this.enrichTips(sent),
+      this.enrichTips(received),
+    ]);
+
     return {
-      sent: this.paginationService.wrap(sent, totalSent, page, limit),
-      received: this.paginationService.wrap(received, totalReceived, page, limit),
+      sent: this.paginationService.wrap(enrichedSent, totalSent, page, limit),
+      received: this.paginationService.wrap(enrichedReceived, totalReceived, page, limit),
     };
   }
 
