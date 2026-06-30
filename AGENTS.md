@@ -255,17 +255,98 @@ async generateUniqueShortCode(businessName: string): Promise<string> {
 
 ## 8. PR/Commit Workflow
 
-### Git Workflow (Per User Requirement)
-1. Push changes to `develop` branch
-2. Rebase `develop` with `staging` (or rebase onto staging)
-3. Create PR to `staging` (not main)
-4. Trigger OpenCode review with `/oc please review this PR`
+### Objective
+Keep `develop` and `staging` in lockstep so every PR diff contains **only your new work** — zero unrelated files, zero phantom diffs.
+
+### Pre-Flight: Confirm You're on `develop`
+```bash
+git rev-parse --abbrev-ref HEAD   # must output "develop"
+```
+
+### Step-by-Step Workflow (Rebase Strategy)
+
+**1. Sync: rebase `develop` onto `origin/staging`**
+```bash
+git fetch origin
+git rebase origin/staging
+```
+This rewinds `develop` to match `staging`, then replays your uncommitted local work on top. The result is `develop` = `staging` + your changes with a clean linear history.
+
+**2. Stage and commit your work**
+```bash
+git add .
+git commit -m "feat(scope): concise description of the change"
+```
+
+**3. Push `develop` to remote**
+```bash
+git push origin develop
+```
+> After a rebase that rewrote history you'd already pushed, use `--force-with-lease` instead of plain `--force`. This is safe because only **you** work on `develop`.
+
+**4. Create a PR targeting `staging`**
+```bash
+gh pr create \
+  --base staging \
+  --head develop \
+  --title "$(git log -1 --pretty=%s)" \
+  --body "Link to ticket / what changed / how to test"
+```
+
+**5. Trigger OpenCode review**
+```
+/oc please review this PR
+```
+
+### Visual Flow
+
+```
+Before sync:
+  staging:  S1 ─── S2 ─── S3
+  develop:  S1 ─── S2 ─── D1 ─── D2
+
+Step 1 (git fetch origin && git rebase origin/staging):
+  staging:  S1 ─── S2 ─── S3
+  develop:  S1 ─── S2 ─── S3 ─── D1' ─── D2'
+                                          ↑ rebased on top of S3
+
+Steps 2-4 (commit, push, PR):
+  staging:  S1 ─── S2 ─── S3
+  develop:  S1 ─── S2 ─── S3 ─── D1' ─── D2' ─── D3
+                                                   ↑ new commit, PR → staging
+```
+
+### Why Rebase Over Merge?
+
+| Aspect | Merge | Rebase ✅ |
+|--------|-------|-----------|
+| History | Merge commits pollute `develop` | Linear, readable |
+| PR diff | Shows "merge staging into develop" noise | Only your changes |
+| Revert | Complicated — must understand merge-parents | `git revert <sha>` works cleanly |
+| Conflict resolution | Once at merge, once at PR | Once at rebase (before commit) |
+
+### Divergence Prevention Rules
+
+1. **`staging` is PR-only** — enable branch protection on GitHub to block direct pushes
+2. **Always sync first** — never commit on `develop` without rebasing onto `origin/staging` first
+3. **After PR merge, refresh `develop`** — delete the remote `develop` branch and recreate it from the new `staging`:
+   ```bash
+   git checkout staging && git pull origin staging
+   git branch -D develop && git checkout -b develop
+   git push origin develop
+   ```
+   This guarantees `develop` is always exactly `staging` at the start of the next cycle.
 
 ---
 
 ## 9. Pre-Commit & Pre-Push Checklist
 
 Before committing and pushing any code, verify:
+
+### Git Sync
+- [ ] **Rebase first** — `git fetch origin && git rebase origin/staging` (Section 8, Step 1)
+- [ ] No merge commits or conflicts in staging files that aren't yours
+- [ ] Confirm you're on `develop` branch
 
 ### Unit & Integration Tests
 - [ ] `pnpm run lint` passes
@@ -373,5 +454,5 @@ src/module/
 
 ---
 
-*Last Updated: 2026-06-26*
-*Version: 3.0 — Pre-commit live endpoint testing mandate + test user credentials documented*
+*Last Updated: 2026-06-30*
+*Version: 4.0 — Rebased PR workflow: sync-first strategy + divergence prevention rules*

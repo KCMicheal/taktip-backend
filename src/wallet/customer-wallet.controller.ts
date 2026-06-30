@@ -20,6 +20,7 @@ import { WalletService, TransactionResponseDto, TransactionsListDto } from './wa
 import { Wallet } from './entities/wallet.entity';
 import { Transaction } from './entities/transaction.entity';
 import { CustomerDepositDto } from './dto/customer-deposit.dto';
+import { VerifyDepositDto } from './dto/verify-deposit.dto';
 import { TipFromWalletDto } from './dto/tip-from-wallet.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -35,6 +36,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
 import { Payment } from '../payments/entities/payment.entity';
+import { PaymentStatus } from '../payments/enums/payment-status.enum';
 import { ConfigService } from '@nestjs/config';
 import { PAYMENT_PROVIDER } from '../payments/providers/providers.constants';
 import { PaymentProvider } from '../payments/providers/interfaces/payment-provider.interface';
@@ -221,6 +223,74 @@ export class CustomerWalletController {
         reference: payment.reference,
       },
     };
+  }
+
+  @Post('deposit/verify')
+  @ApiOperation({ summary: 'Verify a deposit after Paystack redirect (UX feedback only — webhook is the source of truth for crediting)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Deposit verification result',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            status: { type: 'string', example: 'success' },
+            amount: { type: 'number', example: 5000 },
+            reference: { type: 'string', example: 'TXT-1712345678-abc' },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Payment not found' })
+  async verifyDeposit(
+    @CurrentUser() user: { sub: string; role: Role },
+    @Body() dto: VerifyDepositDto,
+  ): Promise<SuccessResponseDto<{
+    status: 'success' | 'failed';
+    amount: number;
+    reference: string;
+  }>> {
+    // Find the payment record locally
+    const payment = await this.paymentRepository.findOne({ where: { reference: dto.reference } });
+    if (!payment) {
+      throw new NotFoundException('Payment not found for the given reference');
+    }
+
+    // Verify the payment belongs to this customer's wallet
+    const metadata = payment.metadata;
+    const { wallet } = await this.resolveCustomerWallet(user.sub);
+    if (metadata?.walletId !== wallet.id) {
+      throw new NotFoundException('Payment not found for your wallet');
+    }
+
+    // Call Paystack to verify the actual transaction status
+    // This is the authoritative check — Paystack returns the real state
+    try {
+      const result = await this.paymentProvider.verifyTransaction(dto.reference);
+      return {
+        status: 'success',
+        data: {
+          status: result.status ? 'success' : 'failed',
+          amount: result.amount,
+          reference: dto.reference,
+        },
+      };
+    } catch {
+      // If the Paystack API call fails (network error, timeout), fall back
+      // to our local payment record status so the FE still gets an answer.
+      return {
+        status: 'success',
+        data: {
+          status: payment.paymentStatus === PaymentStatus.SUCCESS ? 'success' : 'failed',
+          amount: payment.amount,
+          reference: dto.reference,
+        },
+      };
+    }
   }
 
   @Post('tip')
