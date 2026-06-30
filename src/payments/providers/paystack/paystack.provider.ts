@@ -418,6 +418,36 @@ export class PaystackProvider implements PaymentProvider {
         this.logger.warn(`Tip not found for id: ${payment.tipId}`);
       }
     }
+
+    // ── Failed wallet deposit: log a FAILED transaction in the wallet ledger ──
+    const metadata = payment.metadata;
+    if (metadata?.deposit === true && metadata?.walletId) {
+      const walletId = metadata.walletId as string;
+      const amount = payment.amount;
+      const failureReason = payment.failureReason || 'Payment failed';
+
+      // Fetch wallet to capture a balance snapshot (balance unchanged for failed deposits)
+      const wallet = await this.walletRepository.findOne({ where: { id: walletId } });
+      const currentBalance = wallet?.balanceAvailable ?? 0;
+
+      // Create a FAILED DEPOSIT transaction record for audit trail
+      const tx = this.transactionRepository.create({
+        walletId,
+        type: TransactionType.DEPOSIT,
+        amount,
+        fee: 0,
+        reference: payment.reference,
+        description: `Failed wallet deposit via Paystack: ${failureReason}`,
+        transactionStatus: TransactionStatus.FAILED,
+        balanceBefore: currentBalance,
+        balanceAfter: currentBalance,
+      });
+      await this.transactionRepository.save(tx);
+
+      this.logger.log(
+        `Failed deposit transaction ${tx.id} logged for wallet ${walletId} (ref: ${payment.reference})`,
+      );
+    }
   }
 
   // ───────── C2C tip recipient notification ─────────
