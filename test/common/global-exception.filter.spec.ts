@@ -62,7 +62,6 @@ describe('GlobalExceptionFilter', () => {
       expect(capturedBody).toEqual({
         status: HttpStatus.BAD_REQUEST,
         message: 'Bad Request',
-        data: null,
       });
     });
 
@@ -79,7 +78,6 @@ describe('GlobalExceptionFilter', () => {
       expect(capturedBody).toEqual({
         status: HttpStatus.BAD_REQUEST,
         message: 'Validation failed',
-        data: null,
       });
     });
 
@@ -96,7 +94,6 @@ describe('GlobalExceptionFilter', () => {
       expect(capturedBody).toEqual({
         status: HttpStatus.BAD_REQUEST,
         message: 'Field1 is required, Field2 is required',
-        data: null,
       });
     });
 
@@ -110,7 +107,6 @@ describe('GlobalExceptionFilter', () => {
       expect(capturedBody).toEqual({
         status: HttpStatus.NOT_FOUND,
         message: 'Resource not found',
-        data: null,
       });
     });
 
@@ -124,7 +120,6 @@ describe('GlobalExceptionFilter', () => {
       expect(capturedBody).toEqual({
         status: HttpStatus.UNAUTHORIZED,
         message: 'Unauthorized',
-        data: null,
       });
     });
 
@@ -138,7 +133,6 @@ describe('GlobalExceptionFilter', () => {
       expect(capturedBody).toEqual({
         status: HttpStatus.FORBIDDEN,
         message: 'Forbidden',
-        data: null,
       });
     });
   });
@@ -154,7 +148,6 @@ describe('GlobalExceptionFilter', () => {
       expect(capturedBody).toEqual({
         status: HttpStatus.INTERNAL_SERVER_ERROR,
         message: 'Something went wrong',
-        data: null,
       });
     });
 
@@ -168,7 +161,6 @@ describe('GlobalExceptionFilter', () => {
       expect(capturedBody).toEqual({
         status: HttpStatus.INTERNAL_SERVER_ERROR,
         message: 'Database connection failed',
-        data: null,
       });
     });
   });
@@ -184,7 +176,6 @@ describe('GlobalExceptionFilter', () => {
       expect(capturedBody).toEqual({
         status: HttpStatus.INTERNAL_SERVER_ERROR,
         message: 'Internal server error',
-        data: null,
       });
     });
 
@@ -198,7 +189,6 @@ describe('GlobalExceptionFilter', () => {
       expect(capturedBody).toEqual({
         status: HttpStatus.INTERNAL_SERVER_ERROR,
         message: 'Internal server error',
-        data: null,
       });
     });
   });

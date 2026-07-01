@@ -17,6 +17,9 @@ export interface ResponseWrapper<T> {
 /**
  * Global response interceptor that wraps all successful responses
  * with a consistent structure: { status, message, data }
+ *
+ * Handles controllers that manually return { status: 'success', data: ... }
+ * by unwrapping them to prevent double-wrapping.
  */
 @Injectable()
 export class ResponseInterceptor<T> implements NestInterceptor<T, ResponseWrapper<T>> {
@@ -28,11 +31,23 @@ export class ResponseInterceptor<T> implements NestInterceptor<T, ResponseWrappe
     const statusCode: number = response.statusCode;
 
     return next.handle().pipe(
-      map((data): ResponseWrapper<T> => ({
-        status: statusCode,
-        message: 'Success',
-        data: data as T,
-      })),
+      map((data): ResponseWrapper<T> => {
+        // Some controllers manually return { status: 'success', data: ... }
+        // Detect and unwrap to prevent double-wrapping
+        if (data && typeof data === 'object' && 'status' in data && data.status === 'success') {
+          return {
+            status: statusCode,
+            message: 'Success',
+            data: (data as Record<string, unknown>).data as T ?? null,
+          };
+        }
+
+        return {
+          status: statusCode,
+          message: 'Success',
+          data: data as T,
+        };
+      }),
     );
   }
 }

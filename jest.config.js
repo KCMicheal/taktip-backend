@@ -16,6 +16,7 @@ module.exports = {
     '^@/(.*)$': '<rootDir>/src/$1',
     '^@auth/(.*)$': '<rootDir>/src/auth/$1',
     '^@health/(.*)$': '<rootDir>/src/health/$1',
+    '^otplib$': '<rootDir>/test/__mocks__/otplib.ts',
     '^jose$': '<rootDir>/test/__mocks__/jose.ts',
   },
 };

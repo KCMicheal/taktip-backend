@@ -9,6 +9,7 @@ import { MailService } from './services/mail.service';
 import { EmailFallbackService } from './services/email-fallback.service';
 import { AuthService } from './services/auth.service';
 import { TokenService } from './services/token.service';
+import { TwoFactorService } from './services/two-factor.service';
 import { AuthController } from './controllers/auth.controller';
 import { User } from './entities/user.entity';
 import { RefreshToken } from './entities/refresh-token.entity';
@@ -53,6 +54,7 @@ import { CustomerModule } from '../customer/customer.module';
     EmailFallbackService,
     TokenService,
     AuthService,
+    TwoFactorService,
     // Guards
     {
       provide: 'JWT_AUTH_GUARD',
@@ -76,6 +78,7 @@ import { CustomerModule } from '../customer/customer.module';
     MailService,
     TokenService,
     AuthService,
+    TwoFactorService,
     TypeOrmModule,
   ],
 })

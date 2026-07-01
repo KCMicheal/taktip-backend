@@ -23,6 +23,7 @@ import {
 import { OtpService } from './otp.service';
 import { MailService } from './mail.service';
 import { TokenService, TokenPair } from './token.service';
+import { TwoFactorService } from './two-factor.service';
 import { Role } from '../enums/role.enum';
 import { MerchantService } from '../../merchant/merchant.service';
 import { CustomerService } from '../../customer/customer.service';
@@ -56,6 +57,7 @@ export class AuthService {
     private readonly tokenService: TokenService,
     private readonly merchantService: MerchantService,
     private readonly customerService: CustomerService,
+    private readonly twoFactorService: TwoFactorService,
   ) {}
 
   /**
@@ -370,6 +372,11 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // Check two-factor authentication if enabled
+    if (user.isTwoFactorEnabled) {
+      await this.twoFactorService.validateTwoFactorCode(user, dto.twoFactorToken);
+    }
+
     // Revoke old tokens for this user (same device login)
     await this.tokenService.revokeOldTokensForUser(user.id);
 
@@ -380,6 +387,121 @@ export class AuthService {
       ...tokens,
       user: this.toUserResponse(user),
     };
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  //  2FA (Two-Factor Authentication) — shared across all user types
+  // ─────────────────────────────────────────────────────────────
+
+  /**
+   * Generate TOTP secret, QR code, and backup codes for 2FA setup.
+   * The secret is saved provisionally until the user confirms with a TOTP code.
+   */
+  async setup2FA(userId: string): Promise<{
+    secret: string;
+    qrCode: string;
+    backupCodes: string[];
+  }> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.isTwoFactorEnabled) {
+      throw new ConflictException('Two-factor authentication is already enabled');
+    }
+
+    return this.twoFactorService.generateSetupSecret(userId, user.email);
+  }
+
+  /**
+   * Confirm and enable 2FA.
+   * Verifies current password + TOTP code before enabling.
+   */
+  async enable2FA(
+    userId: string,
+    password: string,
+    token: string,
+  ): Promise<{ message: string }> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.isTwoFactorEnabled) {
+      throw new ConflictException('Two-factor authentication is already enabled');
+    }
+
+    // Verify current password
+    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    // Verify TOTP code against the provisionally saved secret
+    if (!user.twoFactorSecret) {
+      throw new BadRequestException(
+        'Please generate a 2FA setup code first using POST /auth/2fa/setup',
+      );
+    }
+
+    const isValid = this.twoFactorService.verifyTOTP(token, user.twoFactorSecret);
+    if (!isValid) {
+      throw new UnauthorizedException('Invalid two-factor authentication code');
+    }
+
+    user.isTwoFactorEnabled = true;
+    await this.userRepository.save(user);
+
+    // Send confirmation email
+    try {
+      await this.mailService.sendOtpEmail(
+        user.email,
+        'Two-factor authentication has been enabled on your TakTip account.',
+        user.email.split('@')[0],
+      );
+    } catch {
+      this.logger.warn(`Failed to send 2FA confirmation email to ${user.email}`);
+    }
+
+    this.logger.log(`2FA enabled for user ${userId}`);
+    return { message: 'Two-factor authentication has been enabled successfully.' };
+  }
+
+  /**
+   * Disable 2FA.
+   * Verifies current password + TOTP or backup code before disabling.
+   */
+  async disable2FA(
+    userId: string,
+    password: string,
+    token?: string,
+  ): Promise<{ message: string }> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (!user.isTwoFactorEnabled) {
+      throw new BadRequestException('Two-factor authentication is not enabled');
+    }
+
+    // Verify current password
+    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    // Validate TOTP or backup code before disabling
+    await this.twoFactorService.validateTwoFactorCode(user, token);
+
+    user.isTwoFactorEnabled = false;
+    user.twoFactorSecret = null;
+    user.backupCodes = null;
+    await this.userRepository.save(user);
+
+    this.logger.log(`2FA disabled for user ${userId}`);
+    return { message: 'Two-factor authentication has been disabled successfully.' };
   }
 
   /**
