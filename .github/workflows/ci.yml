@@ -66,12 +66,12 @@ jobs:
 
     steps:
       # ── Checkout & Setup ──
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         # version auto-detected from package.json's "packageManager" field
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: 'pnpm'
@@ -93,6 +93,14 @@ jobs:
       # ── Tests ──
       - name: Run tests
         run: pnpm run test
+
+      # ── Generate JWT signing keys ──
+      # Ed25519 key pair is gitignored; generate it for the health check
+      - name: Generate JWT keys
+        run: |
+          mkdir -p keys
+          openssl genpkey -algorithm ed25519 -out keys/ed25519_private.pem
+          openssl pkey -in keys/ed25519_private.pem -pubout -out keys/ed25519_public.pem
 
       # ── Health check (server boots + responds) ──
       - name: Start server & verify health
