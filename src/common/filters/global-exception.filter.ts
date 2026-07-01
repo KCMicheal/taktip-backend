@@ -34,8 +34,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const extra: Record<string, unknown> = {};
 
     if (exception instanceof HttpException) {
-      status = exception.getStatus();
-      const exceptionResponse = exception.getResponse();
+      const httpException = exception as HttpException;
+      status = httpException.getStatus();
+      const exceptionResponse = httpException.getResponse();
 
       // Extract message and extra properties from HttpException response
       if (typeof exceptionResponse === 'string') {
