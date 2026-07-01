@@ -1,4 +1,14 @@
-import { Controller, Get, Put, Body, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Put,
+  Patch,
+  Post,
+  Delete,
+  Body,
+  Param,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -7,6 +17,10 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Role } from '../auth/enums/role.enum';
 import { CustomerService } from './customer.service';
 import { UpdateCustomerProfileDto } from './dto/update-profile.dto';
+import { UpdateNotificationPreferencesDto } from './dto/update-notification-preferences.dto';
+import { UpdateCustomerPreferencesDto } from './dto/update-customer-preferences.dto';
+import { CreatePaymentMethodDto } from './dto/create-payment-method.dto';
+import { Enable2FaDto, Disable2FaDto } from '../auth/dto';
 
 @ApiTags('customer')
 @ApiBearerAuth()
@@ -16,13 +30,15 @@ import { UpdateCustomerProfileDto } from './dto/update-profile.dto';
 export class CustomerController {
   constructor(private readonly customerService: CustomerService) {}
 
+  // ─────────────────────────────────────────────────────────────
+  //  Profile
+  // ─────────────────────────────────────────────────────────────
+
   @Get('profile')
   @ApiOperation({ summary: 'Get the authenticated customer profile' })
   @ApiResponse({ status: 200, description: 'Customer profile returned' })
   @ApiResponse({ status: 404, description: 'Customer profile not found' })
-  async getProfile(
-    @CurrentUser() user: { sub: string },
-  ) {
+  async getProfile(@CurrentUser() user: { sub: string }) {
     const profile = await this.customerService.getByUserId(user.sub);
     return {
       status: 'success',
@@ -34,6 +50,9 @@ export class CustomerController {
         firstName: profile.user.firstName,
         lastName: profile.user.lastName,
         phone: profile.user.phone,
+        notificationPreferences: profile.notificationPreferences,
+        preferences: profile.preferences,
+        paymentMethods: profile.paymentMethods,
       },
     };
   }
@@ -59,5 +78,104 @@ export class CustomerController {
         phone: profile.user.phone,
       },
     };
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  //  Notification Preferences
+  // ─────────────────────────────────────────────────────────────
+
+  @Patch('profile/notifications')
+  @ApiOperation({ summary: 'Update notification preferences' })
+  @ApiResponse({ status: 200, description: 'Notification preferences updated' })
+  @ApiResponse({ status: 400, description: 'Validation error' })
+  async updateNotificationPreferences(
+    @CurrentUser() user: { sub: string },
+    @Body() dto: UpdateNotificationPreferencesDto,
+  ) {
+    const prefs = await this.customerService.updateNotificationPreferences(
+      user.sub,
+      { ...dto },
+    );
+    return { status: 'success', data: prefs };
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  //  General Preferences
+  // ─────────────────────────────────────────────────────────────
+
+  @Patch('profile/preferences')
+  @ApiOperation({ summary: 'Update customer preferences (language, currency, timezone)' })
+  @ApiResponse({ status: 200, description: 'Preferences updated' })
+  @ApiResponse({ status: 400, description: 'Validation error' })
+  async updateCustomerPreferences(
+    @CurrentUser() user: { sub: string },
+    @Body() dto: UpdateCustomerPreferencesDto,
+  ) {
+    const prefs = await this.customerService.updatePreferences(
+      user.sub,
+      { ...dto },
+    );
+    return { status: 'success', data: prefs };
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  //  Payment Methods
+  // ─────────────────────────────────────────────────────────────
+
+  @Post('profile/payment-methods')
+  @ApiOperation({ summary: 'Add a new payment method' })
+  @ApiResponse({ status: 201, description: 'Payment method added' })
+  @ApiResponse({ status: 400, description: 'Validation error' })
+  async addPaymentMethod(
+    @CurrentUser() user: { sub: string },
+    @Body() dto: CreatePaymentMethodDto,
+  ) {
+    const method = await this.customerService.addPaymentMethod(user.sub, dto);
+    return { status: 'success', data: method };
+  }
+
+  @Delete('profile/payment-methods/:id')
+  @ApiOperation({ summary: 'Delete a saved payment method' })
+  @ApiResponse({ status: 200, description: 'Payment method deleted' })
+  @ApiResponse({ status: 404, description: 'Payment method not found' })
+  async deletePaymentMethod(
+    @CurrentUser() user: { sub: string },
+    @Param('id') id: string,
+  ) {
+    await this.customerService.deletePaymentMethod(user.sub, id);
+    return { status: 'success', data: { message: 'Payment method deleted successfully' } };
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  //  2FA (Two-Factor Authentication)
+  // ─────────────────────────────────────────────────────────────
+
+  @Post('auth/2fa/enable')
+  @ApiOperation({ summary: 'Enable two-factor authentication' })
+  @ApiResponse({ status: 200, description: '2FA enabled' })
+  @ApiResponse({ status: 400, description: 'Validation error' })
+  @ApiResponse({ status: 409, description: '2FA already enabled' })
+  async enable2FA(
+    @CurrentUser() user: { sub: string },
+    @Body() dto: Enable2FaDto,
+  ) {
+    const result = await this.customerService.enable2FA(user.sub, dto.password);
+    return { status: 'success', data: result };
+  }
+
+  @Post('auth/2fa/disable')
+  @ApiOperation({ summary: 'Disable two-factor authentication' })
+  @ApiResponse({ status: 200, description: '2FA disabled' })
+  @ApiResponse({ status: 400, description: 'Validation error' })
+  async disable2FA(
+    @CurrentUser() user: { sub: string },
+    @Body() dto: Disable2FaDto,
+  ) {
+    const result = await this.customerService.disable2FA(
+      user.sub,
+      dto.password,
+      dto.otp,
+    );
+    return { status: 'success', data: result };
   }
 }

@@ -8,3 +8,5 @@ export * from './forgot-password.dto';
 export * from './reset-password.dto';
 export * from './change-password.dto';
 export * from './response.dto';
+export * from './enable-2fa.dto';
+export * from './disable-2fa.dto';

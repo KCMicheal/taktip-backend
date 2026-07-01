@@ -25,4 +25,25 @@ export class CustomerProfile extends BaseEntity {
    */
   @Column({ type: 'text', nullable: true, name: 'avatar' })
   avatar: string | null;
+
+  /**
+   * Notification preferences stored as JSONB.
+   * e.g. { pushEnabled: true, emailNotifications: true, tipReceived: true }
+   */
+  @Column({ type: 'jsonb', nullable: true, name: 'notification_preferences' })
+  notificationPreferences: Record<string, unknown> | null;
+
+  /**
+   * General user preferences (language, currency, timezone) stored as JSONB.
+   * e.g. { language: "en", currency: "USD", timezone: "America/New_York" }
+   */
+  @Column({ type: 'jsonb', nullable: true, name: 'preferences' })
+  preferences: Record<string, unknown> | null;
+
+  /**
+   * Saved payment methods stored as a JSONB array.
+   * Each entry: { id: string, type: "card"|"bank", ...details }
+   */
+  @Column({ type: 'jsonb', nullable: true, name: 'payment_methods' })
+  paymentMethods: Array<Record<string, unknown>> | null;
 }

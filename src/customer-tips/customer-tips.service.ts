@@ -28,6 +28,7 @@ import {
   SendCustomerTipDto,
   SearchCustomersQueryDto,
 } from './dto/send-customer-tip.dto';
+import { ExportTipsQueryDto } from './dto/export-tips-query.dto';
 import { PaginationService, PaginatedResult } from '../common/pagination';
 import { TipHistoryQueryDto, TipDirection, TipPeriod, TipStatusFilter } from './dto/tip-history-query.dto';
 
@@ -466,6 +467,132 @@ export class CustomerTipsService {
    *
    * Items are enriched with human-readable names (senderName, recipientName, merchantName).
    */
+  /**
+   * Export tip history as CSV for the current customer.
+   * Applies the same filters as getMyTipHistory but returns all matching
+   * rows (unpaginated) formatted as CSV text.
+   */
+  async exportTipsToCsv(
+    user: { sub: string; role: Role },
+    query: ExportTipsQueryDto,
+  ): Promise<string> {
+    const profile = await this.customerService.getByUserId(user.sub);
+    const direction = query.direction ?? TipDirection.ALL;
+    const period = query.period ?? TipPeriod.ALL;
+    const status = query.status ?? TipStatusFilter.ALL;
+
+    // ── Build dynamic query (same filters as getMyTipHistory) ──
+    const queryBuilder = this.tipRepository
+      .createQueryBuilder('tip')
+      .orderBy('tip.createdAt', 'DESC');
+
+    // Direction
+    switch (direction) {
+      case TipDirection.SENT:
+        queryBuilder.andWhere(
+          '(tip.customerProfileId = :profileId OR (tip.senderId = :profileId AND tip.recipientType = :customerType))',
+          { profileId: profile.id, customerType: 'customer' },
+        );
+        break;
+      case TipDirection.RECEIVED:
+        queryBuilder.andWhere(
+          '(tip.staffProfileId = :profileId AND tip.recipientType = :customerType)',
+          { profileId: profile.id, customerType: 'customer' },
+        );
+        break;
+      case TipDirection.ALL:
+      default:
+        queryBuilder.andWhere(
+          '(tip.customerProfileId = :profileId OR tip.staffProfileId = :profileId OR (tip.senderId = :profileId AND tip.recipientType = :customerType))',
+          { profileId: profile.id, customerType: 'customer' },
+        );
+        break;
+    }
+
+    // Period
+    if (period !== TipPeriod.ALL) {
+      const days =
+        period === TipPeriod.SEVEN_DAYS
+          ? 7
+          : period === TipPeriod.THIRTY_DAYS
+            ? 30
+            : 90;
+      const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+      queryBuilder.andWhere('tip.createdAt >= :cutoff', { cutoff });
+    }
+
+    // Status
+    if (status !== TipStatusFilter.ALL) {
+      const tipStatusMap: Record<string, number> = {
+        [TipStatusFilter.COMPLETED]: TipStatus.COMPLETED,
+        [TipStatusFilter.PENDING]: TipStatus.PENDING,
+        [TipStatusFilter.REFUNDED]: TipStatus.REFUNDED,
+        [TipStatusFilter.FAILED]: TipStatus.FAILED,
+      };
+      queryBuilder.andWhere('tip.tipStatus = :tipStatus', {
+        tipStatus: tipStatusMap[status],
+      });
+    }
+
+    const tips = await queryBuilder.getMany();
+
+    // Enrich with names
+    const enriched = await this.enrichTips(tips);
+
+    // ── Build CSV ──
+    const HEADERS = [
+      'ID',
+      'Date',
+      'Type',
+      'Direction',
+      'Sender',
+      'Recipient',
+      'Merchant',
+      'Amount',
+      'Currency',
+      'Status',
+      'Message',
+    ];
+
+    const TYPE_LABELS: Record<number, string> = {
+      [TipSource.GUEST]: 'Guest Tip',
+      [TipSource.WALLET]: 'Wallet Tip',
+      [TipSource.CUSTOMER_TO_CUSTOMER]: 'C2C Tip',
+    };
+
+    const STATUS_LABELS: Record<number, string> = {
+      [TipStatus.COMPLETED]: 'Completed',
+      [TipStatus.PENDING]: 'Pending',
+      [TipStatus.REFUNDED]: 'Refunded',
+      [TipStatus.FAILED]: 'Failed',
+    };
+
+    const escapeCsv = (val: string | undefined | null): string => {
+      if (val == null) return '';
+      const str = String(val);
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const rows = enriched.map((t) => [
+      escapeCsv(t.id),
+      escapeCsv(t.createdAt instanceof Date ? t.createdAt.toISOString() : String(t.createdAt)),
+      escapeCsv(TYPE_LABELS[t.source] || `Source(${t.source})`),
+      escapeCsv(t.senderName === 'Guest' ? 'Received' : t.customerProfileId ? 'Sent' : 'Received'),
+      escapeCsv(t.senderName),
+      escapeCsv(t.recipientName),
+      escapeCsv(t.merchantName),
+      String(t.amount),
+      escapeCsv(t.currency),
+      escapeCsv(STATUS_LABELS[t.tipStatus] || `Status(${t.tipStatus})`),
+      escapeCsv(t.message),
+    ].join(','));
+
+    return [HEADERS.join(','), ...rows].join('\n');
+  }
+
   async getMyTipHistory(
     user: { sub: string; role: Role },
     query: TipHistoryQueryDto,

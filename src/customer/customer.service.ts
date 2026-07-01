@@ -1,7 +1,19 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import * as bcrypt from 'bcrypt';
+import { randomUUID } from 'crypto';
 import { CustomerProfile } from './entities/customer-profile.entity';
+import { User } from '../auth/entities/user.entity';
+import { OtpService } from '../auth/services/otp.service';
+import { MailService } from '../auth/services/mail.service';
 
 @Injectable()
 export class CustomerService {
@@ -10,6 +22,10 @@ export class CustomerService {
   constructor(
     @InjectRepository(CustomerProfile)
     private readonly customerProfileRepository: Repository<CustomerProfile>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+    private readonly otpService: OtpService,
+    private readonly mailService: MailService,
   ) {}
 
   /**
@@ -77,5 +93,208 @@ export class CustomerService {
 
     // Reload with user relation for response
     return this.getByUserId(userId);
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  //  Notification Preferences
+  // ─────────────────────────────────────────────────────────────
+
+  /**
+   * Update notification preferences for the authenticated customer.
+   * Merges the provided fields into the existing JSONB object.
+   */
+  async updateNotificationPreferences(
+    userId: string,
+    prefs: {
+      pushEnabled?: boolean;
+      emailNotifications?: boolean;
+      tipReceived?: boolean;
+      tipWithdrawn?: boolean;
+      marketingEmails?: boolean;
+      [key: string]: unknown;
+    },
+  ): Promise<Record<string, unknown>> {
+    const profile = await this.getByUserId(userId);
+
+    const current = profile.notificationPreferences ?? {};
+    const updated = { ...current, ...prefs };
+
+    // Remove undefined keys (not provided by client) to keep JSONB clean
+    for (const key of Object.keys(updated)) {
+      if (updated[key] === undefined) {
+        delete updated[key];
+      }
+    }
+
+    profile.notificationPreferences = updated;
+    await this.customerProfileRepository.save(profile);
+
+    this.logger.log(`Notification preferences updated for user ${userId}`);
+    return updated;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  //  General Preferences
+  // ─────────────────────────────────────────────────────────────
+
+  /**
+   * Update customer preferences (language, currency, timezone).
+   * Merges the provided fields into the existing JSONB object.
+   */
+  async updatePreferences(
+    userId: string,
+    prefs: {
+      language?: string;
+      currency?: string;
+      timezone?: string;
+      [key: string]: unknown;
+    },
+  ): Promise<Record<string, unknown>> {
+    const profile = await this.getByUserId(userId);
+
+    const current = profile.preferences ?? {};
+    const updated = { ...current, ...prefs };
+
+    // Remove undefined keys
+    for (const key of Object.keys(updated)) {
+      if (updated[key] === undefined) {
+        delete updated[key];
+      }
+    }
+
+    profile.preferences = updated;
+    await this.customerProfileRepository.save(profile);
+
+    this.logger.log(`Preferences updated for user ${userId}`);
+    return updated;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  //  Payment Methods
+  // ─────────────────────────────────────────────────────────────
+
+  /**
+   * Add a new payment method to the customer's saved methods.
+   */
+  async addPaymentMethod(
+    userId: string,
+    data: {
+      type: 'card' | 'bank';
+      details: Record<string, unknown>;
+      label?: string;
+    },
+  ): Promise<{ id: string; type: string; label: string }> {
+    const profile = await this.getByUserId(userId);
+
+    const methods = profile.paymentMethods ?? [];
+    const newMethod = {
+      id: randomUUID(),
+      type: data.type,
+      label: data.label ?? `${data.type === 'bank' ? 'Bank Account' : 'Card'}`,
+      details: data.details,
+      createdAt: new Date().toISOString(),
+    };
+
+    methods.push(newMethod);
+    profile.paymentMethods = methods;
+    await this.customerProfileRepository.save(profile);
+
+    this.logger.log(`Payment method added for user ${userId}: ${newMethod.id}`);
+    return { id: newMethod.id, type: newMethod.type, label: newMethod.label };
+  }
+
+  /**
+   * Delete a payment method by its ID.
+   */
+  async deletePaymentMethod(userId: string, methodId: string): Promise<void> {
+    const profile = await this.getByUserId(userId);
+
+    const methods = profile.paymentMethods ?? [];
+    const index = methods.findIndex((m) => m.id === methodId);
+
+    if (index === -1) {
+      throw new NotFoundException('Payment method not found');
+    }
+
+    methods.splice(index, 1);
+    profile.paymentMethods = methods;
+    await this.customerProfileRepository.save(profile);
+
+    this.logger.log(`Payment method deleted for user ${userId}: ${methodId}`);
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  //  2FA (Two-Factor Authentication)
+  // ─────────────────────────────────────────────────────────────
+
+  /**
+   * Enable 2FA for the customer.
+   * Verifies the current password, then enables 2FA.
+   * Sends a confirmation email.
+   */
+  async enable2FA(userId: string, password: string): Promise<{ message: string }> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.isTwoFactorEnabled) {
+      throw new ConflictException('Two-factor authentication is already enabled');
+    }
+
+    // Verify current password
+    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    user.isTwoFactorEnabled = true;
+    await this.userRepository.save(user);
+
+    // Send confirmation email
+    try {
+      await this.mailService.sendOtpEmail(
+        user.email,
+        '2FA has been enabled on your account.',
+        user.email.split('@')[0],
+      );
+    } catch {
+      // Non-blocking — log but don't fail
+      this.logger.warn(`Failed to send 2FA confirmation email to ${user.email}`);
+    }
+
+    this.logger.log(`2FA enabled for user ${userId}`);
+    return { message: 'Two-factor authentication has been enabled successfully.' };
+  }
+
+  /**
+   * Disable 2FA for the customer.
+   * Verifies the current password, then disables 2FA.
+   */
+  async disable2FA(
+    userId: string,
+    password: string,
+    _otp?: string,
+  ): Promise<{ message: string }> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (!user.isTwoFactorEnabled) {
+      throw new BadRequestException('Two-factor authentication is not enabled');
+    }
+
+    // Verify current password
+    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    user.isTwoFactorEnabled = false;
+    await this.userRepository.save(user);
+
+    this.logger.log(`2FA disabled for user ${userId}`);
+    return { message: 'Two-factor authentication has been disabled successfully.' };
   }
 }
