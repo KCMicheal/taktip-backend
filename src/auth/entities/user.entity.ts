@@ -42,6 +42,9 @@ export class User {
   @Column({ type: 'timestamp', nullable: true })
   otpExpiry: Date | null;
 
+  @Column({ type: 'boolean', default: false, name: 'is_two_factor_enabled' })
+  isTwoFactorEnabled: boolean;
+
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
 
