@@ -238,8 +238,8 @@ describe('CustomerTipsController', () => {
   describe('GET /customer/tips/history', () => {
     it('should return paginated tip history', async () => {
       const mockHistory = {
-        sent: { items: [{ id: 'tip-1', amount: 1000 }], total: 1, page: 1, limit: 20 },
-        received: { items: [{ id: 'tip-2', amount: 500 }], total: 1, page: 1, limit: 20 },
+        items: [{ id: 'tip-1', amount: 1000 }, { id: 'tip-2', amount: 500 }],
+        total: 2, page: 1, limit: 20,
       };
 
       mockCustomerTipsService.getMyTipHistory.mockResolvedValue(mockHistory);
@@ -247,10 +247,9 @@ describe('CustomerTipsController', () => {
       const result = await controller.getMyTipHistory(mockUser, { page: 1, limit: 20 });
 
       expect(result.status).toBe('success');
-      expect(result.data.sent.items).toHaveLength(1);
-      expect(result.data.received.items).toHaveLength(1);
-      expect(result.data.sent.total).toBe(1);
-      expect(result.data.sent.page).toBe(1);
+      expect(result.data.items).toHaveLength(2);
+      expect(result.data.total).toBe(2);
+      expect(result.data.page).toBe(1);
       expect(mockCustomerTipsService.getMyTipHistory).toHaveBeenCalledWith(
         mockUser,
         { page: 1, limit: 20 },
@@ -258,10 +257,7 @@ describe('CustomerTipsController', () => {
     });
 
     it('should pass query params through to service', async () => {
-      const emptyHistory = {
-        sent: { items: [], total: 0, page: 1, limit: 20 },
-        received: { items: [], total: 0, page: 1, limit: 20 },
-      };
+      const emptyHistory = { items: [], total: 0, page: 1, limit: 20 };
       mockCustomerTipsService.getMyTipHistory.mockResolvedValue(emptyHistory);
 
       await controller.getMyTipHistory(mockUser, { page: 2, limit: 50 });

@@ -7,7 +7,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { FindOptionsWhere, Repository } from 'typeorm';
 import { randomBytes } from 'crypto';
 import { Wallet } from './entities/wallet.entity';
 import { Transaction } from './entities/transaction.entity';
@@ -17,6 +17,7 @@ import { CreateWalletDto } from './dto/create-wallet.dto';
 import { DepositDto } from './dto/deposit.dto';
 import { WithdrawDto } from './dto/withdraw.dto';
 import { TransferDto } from './dto/transfer.dto';
+import { TransactionHistoryQueryDto } from './dto/transaction-history-query.dto';
 import { Role } from '../auth/enums/role.enum';
 import { Merchant } from '../merchant/entities/merchant.entity';
 import { StaffProfile } from '../staff/entities/staff-profile.entity';
@@ -805,7 +806,7 @@ export class WalletService {
   async getTransactions(
     walletId: string,
     user: { sub: string; role: Role },
-    query: { page?: number; limit?: number },
+    query: TransactionHistoryQueryDto,
   ): Promise<TransactionsListDto> {
     // Enforce ownership: look up wallet, then assert ownership
     const wallet = await this.getWalletById(walletId, user);
@@ -814,9 +815,14 @@ export class WalletService {
     const page = query.page || 1;
     const limit = query.limit || 20;
 
+    // Build dynamic WHERE clause — only include filters that are provided
+    const where: FindOptionsWhere<Transaction> = { walletId: wallet.id };
+    if (query.type !== undefined) where.type = query.type;
+    if (query.status !== undefined) where.transactionStatus = query.status;
+
     return this.paginationService.paginate(
       this.transactionRepository,
-      { walletId: wallet.id },
+      where,
       page,
       limit,
       { order: { createdAt: 'DESC' } },

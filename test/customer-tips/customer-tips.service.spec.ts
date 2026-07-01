@@ -523,72 +523,194 @@ describe('CustomerTipsService', () => {
   });
 
   describe('getMyTipHistory()', () => {
-    it('should return paginated sent and received tips', async () => {
+    it('should return all tips merged into a single paginated list sorted by date', async () => {
       customerService.getByUserId.mockResolvedValue(mockSenderProfile);
 
-      const sentTips = [
+      const allTips = [
+        { id: 'tip-3', staffProfileId: 'sender-profile-uuid', amount: 500, recipientType: 'customer' },
         { id: 'tip-1', senderId: 'sender-profile-uuid', amount: 1000, recipientType: 'customer' },
         { id: 'tip-2', senderId: 'sender-profile-uuid', amount: 2000, recipientType: 'customer' },
       ];
-      const receivedTips = [
-        { id: 'tip-3', staffProfileId: 'sender-profile-uuid', amount: 500, recipientType: 'customer' },
-      ];
 
-      paginationService.wrap
-        .mockReturnValueOnce({ items: sentTips, total: 2, page: 1, limit: 20 })
-        .mockReturnValueOnce({ items: receivedTips, total: 1, page: 1, limit: 20 });
+      const mockQueryBuilder = {
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([allTips, 3]),
+      };
 
-      tipRepository.findAndCount
-        .mockResolvedValueOnce([sentTips, 2])   // sent
-        .mockResolvedValueOnce([receivedTips, 1]); // received
+      tipRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+      paginationService.wrap.mockReturnValue({ items: allTips, total: 3, page: 1, limit: 20 });
 
       const result = await service.getMyTipHistory(mockUser, { page: 1, limit: 20 });
 
-      expect(result.sent.items).toHaveLength(2);
-      expect(result.received.items).toHaveLength(1);
-      expect(result.sent.total).toBe(2);
-      expect(result.received.total).toBe(1);
-      expect(result.sent.page).toBe(1);
-      expect(result.sent.limit).toBe(20);
+      expect(result.items).toHaveLength(3);
+      expect(result.total).toBe(3);
+      expect(result.page).toBe(1);
 
-      expect(tipRepository.findAndCount).toHaveBeenCalledTimes(2);
-      // First call: sent tips
-      expect(tipRepository.findAndCount).toHaveBeenNthCalledWith(1, {
-        where: [
-          { customerProfileId: 'sender-profile-uuid' },
-          { senderId: 'sender-profile-uuid', recipientType: 'customer' },
-        ],
-        order: { createdAt: 'DESC' },
-        skip: 0,
-        take: 20,
-      });
-      // Second call: received tips
-      expect(tipRepository.findAndCount).toHaveBeenNthCalledWith(2, {
-        where: { staffProfileId: 'sender-profile-uuid', recipientType: 'customer' },
-        order: { createdAt: 'DESC' },
-        skip: 0,
-        take: 20,
-      });
+      expect(tipRepository.createQueryBuilder).toHaveBeenCalledWith('tip');
+      expect(mockQueryBuilder.orderBy).toHaveBeenCalledWith('tip.createdAt', 'DESC');
+      // Default direction=all should apply the OR condition
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining('customerProfileId'),
+        expect.any(Object),
+      );
+      expect(paginationService.wrap).toHaveBeenCalledTimes(1);
+    });
+
+    it('should filter by direction=sent', async () => {
+      customerService.getByUserId.mockResolvedValue(mockSenderProfile);
+
+      const mockQueryBuilder = {
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+      };
+
+      tipRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+      paginationService.wrap.mockReturnValue({ items: [], total: 0, page: 1, limit: 20 });
+
+      await service.getMyTipHistory(mockUser, { page: 1, limit: 20, direction: 'sent' as any });
+
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining('tip.customerProfileId'),
+        expect.any(Object),
+      );
+    });
+
+    it('should filter by direction=received', async () => {
+      customerService.getByUserId.mockResolvedValue(mockSenderProfile);
+
+      const mockQueryBuilder = {
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+      };
+
+      tipRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+      paginationService.wrap.mockReturnValue({ items: [], total: 0, page: 1, limit: 20 });
+
+      await service.getMyTipHistory(mockUser, { page: 1, limit: 20, direction: 'received' as any });
+
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining('tip.staffProfileId'),
+        expect.any(Object),
+      );
+    });
+
+    it('should filter by period', async () => {
+      customerService.getByUserId.mockResolvedValue(mockSenderProfile);
+
+      const mockQueryBuilder = {
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+      };
+
+      tipRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+      paginationService.wrap.mockReturnValue({ items: [], total: 0, page: 1, limit: 20 });
+
+      await service.getMyTipHistory(mockUser, { page: 1, limit: 20, period: '7d' as any });
+
+      // Should have called andWhere with cutoff date for period
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining('createdAt'),
+        expect.objectContaining({ cutoff: expect.any(Date) }),
+      );
+    });
+
+    it('should filter by status=completed', async () => {
+      customerService.getByUserId.mockResolvedValue(mockSenderProfile);
+
+      const mockQueryBuilder = {
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+      };
+
+      tipRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+      paginationService.wrap.mockReturnValue({ items: [], total: 0, page: 1, limit: 20 });
+
+      await service.getMyTipHistory(mockUser, { page: 1, limit: 20, status: 'completed' as any });
+
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining('tip.tipStatus'),
+        { tipStatus: 1 }, // TipStatus.COMPLETED = 1
+      );
     });
 
     it('should handle pagination offset correctly', async () => {
       customerService.getByUserId.mockResolvedValue(mockSenderProfile);
 
-      tipRepository.findAndCount
-        .mockResolvedValueOnce([[], 0])
-        .mockResolvedValueOnce([[], 0]);
+      const mockQueryBuilder = {
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+      };
+
+      tipRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+      paginationService.wrap.mockReturnValue({ items: [], total: 0, page: 3, limit: 10 });
 
       await service.getMyTipHistory(mockUser, { page: 3, limit: 10 });
 
-      expect(tipRepository.findAndCount).toHaveBeenNthCalledWith(1, {
-        where: [
-          { customerProfileId: 'sender-profile-uuid' },
-          { senderId: 'sender-profile-uuid', recipientType: 'customer' },
-        ],
-        order: { createdAt: 'DESC' },
-        skip: 20, // (3 - 1) * 10
-        take: 10,
-      });
+      expect(mockQueryBuilder.skip).toHaveBeenCalledWith(20); // (3-1) * 10
+      expect(mockQueryBuilder.take).toHaveBeenCalledWith(10);
+    });
+
+    it('should enrich tips with names', async () => {
+      customerService.getByUserId.mockResolvedValue(mockSenderProfile);
+
+      const tips = [
+        {
+          id: 'tip-1',
+          source: 1, // TipSource.STAFF
+          staffProfileId: 'staff-uuid',
+          customerProfileId: 'sender-profile-uuid',
+          merchantId: 'merchant-uuid',
+          amount: 1000,
+          currency: 'NGN',
+          createdAt: new Date(),
+        },
+      ];
+
+      const mockQueryBuilder = {
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([tips, 1]),
+      };
+
+      tipRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+
+      const enriched = [{
+        id: 'tip-1',
+        source: 1,
+        amount: 1000,
+        currency: 'NGN',
+        senderName: 'Test Sender',
+        recipientName: 'Test Staff',
+        merchantName: 'Test Merchant',
+      }];
+
+      paginationService.wrap.mockReturnValue({ items: enriched, total: 1, page: 1, limit: 20 });
+
+      const result = await service.getMyTipHistory(mockUser, { page: 1, limit: 20 });
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0].senderName).toBeDefined();
+      expect(result.items[0].recipientName).toBeDefined();
     });
   });
 });
