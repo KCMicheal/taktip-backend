@@ -59,6 +59,10 @@ jobs:
       DATABASE_URL: postgresql://taktip:testpassword@localhost:5432/taktip_test
       REDIS_URL: redis://localhost:6379
       APP_PORT: 3001
+      # Dummy Mailjet creds — MailService calls apiConnect() in its constructor
+      # and throws if these are missing. The values are never actually called in CI.
+      MAILJET_API_KEY: ci-dummy-key
+      MAILJET_API_SECRET: ci-dummy-secret
 
     steps:
       # ── Checkout & Setup ──
