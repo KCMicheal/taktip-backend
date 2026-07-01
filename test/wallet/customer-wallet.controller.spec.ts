@@ -329,7 +329,7 @@ describe('CustomerWalletController', () => {
       mockWalletService.getOrCreateCustomerWallet.mockResolvedValue(mockWallet);
       mockWalletService.getTransactions.mockResolvedValue({ items: mockTransactions, total: 2, page: 1, limit: 20 });
 
-      const result = await controller.getMyTransactions(mockUser, '1', '20');
+      const result = await controller.getMyTransactions(mockUser, { page: 1, limit: 20 });
 
       expect(result.status).toBe('success');
       expect(result.data.items).toHaveLength(2);
@@ -341,9 +341,9 @@ describe('CustomerWalletController', () => {
       mockWalletService.getOrCreateCustomerWallet.mockResolvedValue(mockWallet);
       mockWalletService.getTransactions.mockResolvedValue({ items: [], total: 0, page: 1, limit: 20 });
 
-      await controller.getMyTransactions(mockUser, undefined, undefined);
+      await controller.getMyTransactions(mockUser, {});
 
-      expect(mockWalletService.getTransactions).toHaveBeenCalledWith('wallet-uuid', mockUser, { page: 1, limit: 20 });
+      expect(mockWalletService.getTransactions).toHaveBeenCalledWith('wallet-uuid', mockUser, {});
     });
   });
 });

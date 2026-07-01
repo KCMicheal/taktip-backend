@@ -22,6 +22,9 @@ import { Transaction } from './entities/transaction.entity';
 import { CustomerDepositDto } from './dto/customer-deposit.dto';
 import { VerifyDepositDto } from './dto/verify-deposit.dto';
 import { TipFromWalletDto } from './dto/tip-from-wallet.dto';
+import { TransactionHistoryQueryDto } from './dto/transaction-history-query.dto';
+import { TransactionType } from './enums/transaction-type.enum';
+import { TransactionStatus } from './enums/transaction-status.enum';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -391,6 +394,8 @@ export class CustomerWalletController {
   @ApiOperation({ summary: "List the customer's wallet transactions" })
   @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
   @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default: 20)' })
+  @ApiQuery({ name: 'type', required: false, enum: TransactionType, description: 'Filter by transaction type (single value, e.g. 1 = DEPOSIT, 2 = WITHDRAW)' })
+  @ApiQuery({ name: 'status', required: false, enum: TransactionStatus, description: 'Filter by transaction status (single value, e.g. 1 = PENDING, 2 = COMPLETED, 3 = FAILED)' })
   @ApiResponse({
     status: 200,
     description: 'Paginated list of customer wallet transactions',
@@ -429,16 +434,10 @@ export class CustomerWalletController {
   })
   async getMyTransactions(
     @CurrentUser() user: { sub: string; role: Role },
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
+    @Query() query: TransactionHistoryQueryDto,
   ): Promise<SuccessResponseDto<TransactionsListDto>> {
     const { wallet } = await this.resolveCustomerWallet(user.sub);
-    const pageNum = page ? parseInt(page, 10) : 1;
-    const limitNum = limit ? parseInt(limit, 10) : 20;
-    const data = await this.walletService.getTransactions(wallet.id, user, {
-      page: pageNum,
-      limit: limitNum,
-    });
+    const data = await this.walletService.getTransactions(wallet.id, user, query);
     return { status: 'success', data };
   }
 }

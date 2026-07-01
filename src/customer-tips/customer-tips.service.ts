@@ -28,7 +28,8 @@ import {
   SendCustomerTipDto,
   SearchCustomersQueryDto,
 } from './dto/send-customer-tip.dto';
-import { PaginationService, PaginatedResult, PaginationParamsDto } from '../common/pagination';
+import { PaginationService, PaginatedResult } from '../common/pagination';
+import { TipHistoryQueryDto, TipDirection, TipPeriod, TipStatusFilter } from './dto/tip-history-query.dto';
 
 /**
  * Maximum tip amount per transaction (user-defined limit).
@@ -459,52 +460,85 @@ export class CustomerTipsService {
   /**
    * Get tip history for the current customer.
    *
-   * Returns ALL tips associated with the customer:
-   * - **sent**     — staff tips the customer paid + C2C tips the customer sent
-   * - **received** — C2C tips the customer received
+   * Returns a single paginated, chronologically-sorted list of ALL tips
+   * associated with the customer (both sent and received), with optional
+   * server-side filtering by direction, time period, and tip status.
    *
    * Items are enriched with human-readable names (senderName, recipientName, merchantName).
    */
   async getMyTipHistory(
     user: { sub: string; role: Role },
-    query: PaginationParamsDto,
-  ): Promise<{
-    sent: PaginatedResult<TipResponseDto>;
-    received: PaginatedResult<TipResponseDto>;
-  }> {
+    query: TipHistoryQueryDto,
+  ): Promise<PaginatedResult<TipResponseDto>> {
     const profile = await this.customerService.getByUserId(user.sub);
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
+    const direction = query.direction ?? TipDirection.ALL;
+    const period = query.period ?? TipPeriod.ALL;
+    const status = query.status ?? TipStatusFilter.ALL;
 
-    // ── Sent: staff tips (customerProfileId = me) + C2C tips (senderId = me) ──
-    const [sent, totalSent] = await this.tipRepository.findAndCount({
-      where: [
-        { customerProfileId: profile.id },
-        { senderId: profile.id, recipientType: 'customer' },
-      ],
-      order: { createdAt: 'DESC' },
-      skip: this.paginationService.getSkip(page, limit),
-      take: limit,
-    });
+    // ── Build dynamic query ──────────────────────────────────────────────────
+    const queryBuilder = this.tipRepository
+      .createQueryBuilder('tip')
+      .skip(this.paginationService.getSkip(page, limit))
+      .take(limit)
+      .orderBy('tip.createdAt', 'DESC');
 
-    // ── Received: C2C tips where this customer is the recipient ──
-    const [received, totalReceived] = await this.tipRepository.findAndCount({
-      where: { staffProfileId: profile.id, recipientType: 'customer' },
-      order: { createdAt: 'DESC' },
-      skip: this.paginationService.getSkip(page, limit),
-      take: limit,
-    });
+    // Direction
+    switch (direction) {
+      case TipDirection.SENT:
+        queryBuilder.andWhere(
+          '(tip.customerProfileId = :profileId OR (tip.senderId = :profileId AND tip.recipientType = :customerType))',
+          { profileId: profile.id, customerType: 'customer' },
+        );
+        break;
+      case TipDirection.RECEIVED:
+        queryBuilder.andWhere(
+          '(tip.staffProfileId = :profileId AND tip.recipientType = :customerType)',
+          { profileId: profile.id, customerType: 'customer' },
+        );
+        break;
+      case TipDirection.ALL:
+      default:
+        queryBuilder.andWhere(
+          '(tip.customerProfileId = :profileId OR tip.staffProfileId = :profileId OR (tip.senderId = :profileId AND tip.recipientType = :customerType))',
+          { profileId: profile.id, customerType: 'customer' },
+        );
+        break;
+    }
 
-    // Enrich both lists with names in parallel
-    const [enrichedSent, enrichedReceived] = await Promise.all([
-      this.enrichTips(sent),
-      this.enrichTips(received),
-    ]);
+    // Period — use JS-calculated date to avoid INTERVAL param-binding issues
+    if (period !== TipPeriod.ALL) {
+      const days =
+        period === TipPeriod.SEVEN_DAYS
+          ? 7
+          : period === TipPeriod.THIRTY_DAYS
+            ? 30
+            : 90;
+      const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+      queryBuilder.andWhere('tip.createdAt >= :cutoff', { cutoff });
+    }
 
-    return {
-      sent: this.paginationService.wrap(enrichedSent, totalSent, page, limit),
-      received: this.paginationService.wrap(enrichedReceived, totalReceived, page, limit),
-    };
+    // Status
+    if (status !== TipStatusFilter.ALL) {
+      const tipStatusMap: Record<string, number> = {
+        [TipStatusFilter.COMPLETED]: TipStatus.COMPLETED,
+        [TipStatusFilter.PENDING]: TipStatus.PENDING,
+        [TipStatusFilter.REFUNDED]: TipStatus.REFUNDED,
+        [TipStatusFilter.FAILED]: TipStatus.FAILED,
+      };
+      queryBuilder.andWhere('tip.tipStatus = :tipStatus', {
+        tipStatus: tipStatusMap[status],
+      });
+    }
+
+    // ── Execute ──
+    const [tips, total] = await queryBuilder.getManyAndCount();
+
+    // ── Enrich with names ──
+    const enriched = await this.enrichTips(tips);
+
+    return this.paginationService.wrap(enriched, total, page, limit);
   }
 
   /**
