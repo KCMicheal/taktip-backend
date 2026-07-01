@@ -93,8 +93,8 @@ jobs:
       # ── Health check (server boots + responds) ──
       - name: Start server & verify health
         run: |
-          # Start server in background
-          node dist/main &
+          # Start server in background (nest build outputs to dist/src/)
+          node dist/src/main &
           SERVER_PID=$!
 
           # Poll until server responds (up to 30s)
