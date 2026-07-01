@@ -11,6 +11,9 @@ dist/
 npm-debug.log
 yarn-error.log
 
+# npm lockfile — project uses pnpm exclusively
+package-lock.json
+
 # Docker volumes
 .pgdata/
 

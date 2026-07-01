@@ -1,16 +1,35 @@
 name: CI
 
+# ============================================================
+# ⏱  TRIGGER STRATEGY
+# Only run when it actually matters:
+#   - Push to staging (deployments)
+#   - PRs to staging (your review workflow)
+#   - Skip documentation-only changes
+# ============================================================
 on:
   push:
-    branches: [main, staging, 'sprint-*/**']
+    branches: [staging]
+    paths-ignore: ['**.md', 'docs/**']
   pull_request:
-    branches: [main]
+    branches: [staging]
+    paths-ignore: ['**.md', 'docs/**']
+
+# ============================================================
+# 🛑  CONCURRENCY — Cancel in-progress runs when a new push
+#     lands on the same branch. Saves minutes by not running
+#     CI on stale code.
+# ============================================================
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  lint-and-build:
-    name: Lint & Build
+  test:
+    name: Lint, Build, Test & Health Check
     runs-on: ubuntu-latest
-    
+
+    # ── Services: spin up Postgres + Redis ONCE ──
     services:
       postgres:
         image: postgres:16-alpine
@@ -25,7 +44,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      
+
       redis:
         image: redis:7-alpine
         ports:
@@ -36,179 +55,73 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'pnpm'
-
-      - name: Install pnpm
-        run: npm install -g pnpm
-
-      - name: Remove npm lockfile conflict
-        run: rm -f package-lock.json
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Lint
-        run: pnpm run lint
-
-      - name: Build
-        run: pnpm run build
-
-      - name: Type check
-        run: pnpm run typecheck || pnpm run tsc --noEmit
-
-  test:
-    name: Unit Tests
-    runs-on: ubuntu-latest
-    needs: lint-and-build
-    
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: taktip_test
-          POSTGRES_USER: taktip
-          POSTGRES_PASSWORD: testpassword
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-
-    env:
-      DATABASE_URL: postgresql://taktip:testpassword@localhost:5432/taktip_test
-      REDIS_URL: redis://localhost:6379
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'pnpm'
-
-      - name: Install pnpm
-        run: npm install -g pnpm
-
-      - name: Remove npm lockfile conflict
-        run: rm -f package-lock.json
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run tests
-        run: pnpm run test
-
-  health-check:
-    name: Health Check Verification
-    runs-on: ubuntu-latest
-    needs: lint-and-build
-    
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: taktip_test
-          POSTGRES_USER: taktip
-          POSTGRES_PASSWORD: testpassword
-        ports:
-          - 5432:5432
-      
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-
     env:
       DATABASE_URL: postgresql://taktip:testpassword@localhost:5432/taktip_test
       REDIS_URL: redis://localhost:6379
       APP_PORT: 3001
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      # ── Checkout & Setup ──
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'pnpm'
 
-      - name: Install pnpm
-        run: npm install -g pnpm
-
-      - name: Remove npm lockfile conflict
-        run: rm -f package-lock.json
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # ── Code Quality ──
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Type check
+        run: pnpm run typecheck
+
+      # ── Build ──
       - name: Build
         run: pnpm run build
 
-      - name: Start server
-        run: pnpm run start &
-        
-      - name: Wait for server
-        run: sleep 10
+      # ── Tests ──
+      - name: Run tests
+        run: pnpm run test
 
-      - name: Test health endpoint
+      # ── Health check (server boots + responds) ──
+      - name: Start server & verify health
         run: |
-          curl -f http://localhost:3001/health || exit 1
-          curl -f http://localhost:3001/health/../live || exit 1
-          curl -f http://localhost:3001/health/../ready || exit 1
+          # Start server in background
+          node dist/main &
+          SERVER_PID=$!
 
-  approve-review:
-    name: Auto-Approve if Ready
-    runs-on: ubuntu-latest
-    needs: [lint-and-build, test, health-check]
-    if: github.event_name == 'pull_request'
-    
-    steps:
-      - name: Approve PR
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.pulls.createReview({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.issue.number,
-              event: 'APPROVE',
-              body: '✅ All CI checks passed. Approved for merge.'
-            })
+          # Poll until server responds (up to 30s)
+          for i in $(seq 1 15); do
+            if curl -sf "http://localhost:${{ env.APP_PORT }}/api/v1/health" > /dev/null 2>&1; then
+              echo "✅ Server is up (attempt $i)"
+              break
+            fi
+            echo "⏳ Waiting for server... attempt $i"
+            sleep 2
+          done
 
-  deploy-staging:
-    name: Deploy Staging
-    runs-on: self-hosted
-    labels: [staging]
-    needs: [lint-and-build, test, health-check]
-    if: github.ref == 'refs/heads/staging'
-    environment: staging
-    
-    steps:
-      - name: Deploy to staging
-        run: |
-          set -e
-          cd /home/stg-api/public_html
-          git pull origin staging
-          rm -rf node_modules package-lock.json pnpm-lock.yaml
-          pnpm install
-          pnpm run build
-          source .env 2>/dev/null || true
-          pm2 restart stg-api || pm2 start ecosystem.config.js --name stg-api
+          # Run the actual health checks
+          echo "── Health endpoint ──"
+          curl -f "http://localhost:${{ env.APP_PORT }}/api/v1/health"
+          echo ""
+
+          echo "── Liveness probe ──"
+          curl -f "http://localhost:${{ env.APP_PORT }}/api/v1/health/live"
+          echo ""
+
+          echo "── Readiness probe ──"
+          curl -f "http://localhost:${{ env.APP_PORT }}/api/v1/health/ready"
+          echo ""
+
+          echo "✅ All health checks passed"
+
+          # Gracefully stop the server
+          kill $SERVER_PID 2>/dev/null || true

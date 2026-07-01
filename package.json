@@ -1,6 +1,7 @@
 {
   "name": "taktip-backend",
   "version": "1.0.0",
+  "packageManager": "pnpm@10.33.0",
   "description": "TakTip Backend - Digital tipping platform for service businesses",
   "author": "T-One Technologies",
   "private": true,
