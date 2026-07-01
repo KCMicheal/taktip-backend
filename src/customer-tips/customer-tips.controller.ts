@@ -103,8 +103,9 @@ export class CustomerTipsController {
   @ApiQuery({
     name: 'period',
     required: false,
-    enum: ['7d', '30d', '90d', 'all'],
-    description: 'Filter by time period: 7d, 30d, 90d, or all (default: all)',
+    type: Number,
+    description: 'Filter by time period: number of days (1-365) to look back. Omit for all time.',
+    example: 7,
   })
   @ApiQuery({
     name: 'status',

@@ -617,7 +617,7 @@ describe('CustomerTipsService', () => {
       tipRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
       paginationService.wrap.mockReturnValue({ items: [], total: 0, page: 1, limit: 20 });
 
-      await service.getMyTipHistory(mockUser, { page: 1, limit: 20, period: '7d' as any });
+      await service.getMyTipHistory(mockUser, { page: 1, limit: 20, period: 7 });
 
       // Should have called andWhere with cutoff date for period
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
