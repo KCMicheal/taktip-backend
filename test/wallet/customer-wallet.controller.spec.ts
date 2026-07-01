@@ -11,6 +11,7 @@ import { User } from '../../src/auth/entities/user.entity';
 import { Payment } from '../../src/payments/entities/payment.entity';
 import { ConfigService } from '@nestjs/config';
 import { PAYMENT_PROVIDER } from '../../src/payments/providers/providers.constants';
+import { PayoutService } from '../../src/payouts/payouts.service';
 import { Role } from '../../src/auth/enums/role.enum';
 
 describe('CustomerWalletController', () => {
@@ -53,6 +54,10 @@ describe('CustomerWalletController', () => {
 
   const mockUserRepo = {
     findOne: jest.fn(),
+  };
+
+  const mockPayoutService = {
+    requestCustomerPayout: jest.fn(),
   };
 
   const mockConfigService = {
@@ -166,6 +171,10 @@ describe('CustomerWalletController', () => {
         {
           provide: JwtService,
           useValue: mockJwtService,
+        },
+        {
+          provide: PayoutService,
+          useValue: mockPayoutService,
         },
         {
           provide: ConfigService,

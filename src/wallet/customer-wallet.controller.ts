@@ -20,6 +20,7 @@ import { WalletService, TransactionResponseDto, TransactionsListDto } from './wa
 import { Wallet } from './entities/wallet.entity';
 import { Transaction } from './entities/transaction.entity';
 import { CustomerDepositDto } from './dto/customer-deposit.dto';
+import { CustomerWithdrawalDto } from './dto/customer-withdrawal.dto';
 import { VerifyDepositDto } from './dto/verify-deposit.dto';
 import { TipFromWalletDto } from './dto/tip-from-wallet.dto';
 import { TransactionHistoryQueryDto } from './dto/transaction-history-query.dto';
@@ -35,6 +36,8 @@ import { TipsService } from '../tips/tips.service';
 import { TipSource } from '../tips/enums/tip-source.enum';
 import { Tip } from '../tips/entities/tip.entity';
 import { StaffProfile } from '../staff/entities/staff-profile.entity';
+import { PayoutService } from '../payouts/payouts.service';
+import { Payout } from '../payouts/entities/payout.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
@@ -62,6 +65,7 @@ export class CustomerWalletController {
     private readonly walletService: WalletService,
     private readonly customerService: CustomerService,
     private readonly tipsService: TipsService,
+    private readonly payoutService: PayoutService,
     @InjectRepository(StaffProfile)
     private readonly staffProfileRepository: Repository<StaffProfile>,
     @Inject(PAYMENT_PROVIDER)
@@ -387,6 +391,102 @@ export class CustomerWalletController {
     return {
       status: 'success',
       data: { tip, transactions },
+    };
+  }
+
+  @Post('withdraw')
+  @ApiOperation({ summary: 'Withdraw funds from wallet balance to saved bank account (auto-approved, async)' })
+  @ApiResponse({
+    status: 201,
+    description: 'Withdrawal initiated and queued for processing',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'success' },
+        data: {
+          type: 'object',
+          properties: {
+            payout: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', format: 'uuid' },
+                amount: { type: 'number', example: 5000 },
+                netAmount: { type: 'number', example: 5000 },
+                fee: { type: 'number', example: 0 },
+                payoutStatus: { type: 'number', example: 2 },
+                reference: { type: 'string', example: 'CPOUT-1712345678-abc' },
+                bankAccount: {
+                  type: 'object',
+                  properties: {
+                    bankName: { type: 'string', example: 'GTBank' },
+                    accountNumber: { type: 'string', example: '0123456789' },
+                    accountName: { type: 'string', example: 'John Doe' },
+                  },
+                },
+                createdAt: { type: 'string', format: 'date-time' },
+              },
+            },
+            message: { type: 'string', example: 'Withdrawal is being processed. Funds will be sent to your bank account shortly.' },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Insufficient balance, invalid amount, or payment method not found' })
+  @ApiResponse({ status: 404, description: 'Wallet or payment method not found' })
+  async withdraw(
+    @CurrentUser() user: { sub: string; role: Role },
+    @Body() dto: CustomerWithdrawalDto,
+  ): Promise<SuccessResponseDto<{
+    payout: Payout;
+    message: string;
+  }>> {
+    const { profileId: customerProfileId, wallet } = await this.resolveCustomerWallet(user.sub);
+
+    // Resolve the saved payment method by ID from the customer's payment methods
+    const profile = await this.customerService.getOrCreateProfile(user.sub);
+    const methods = profile.paymentMethods ?? [];
+    const paymentMethod = methods.find((m) => m.id === dto.paymentMethodId);
+
+    if (!paymentMethod) {
+      throw new NotFoundException('Payment method not found');
+    }
+
+    if (paymentMethod.type !== 'bank') {
+      throw new BadRequestException('Only bank accounts are supported for withdrawal');
+    }
+
+    if (!paymentMethod.details || typeof paymentMethod.details !== 'object') {
+      throw new BadRequestException('Payment method details are incomplete');
+    }
+
+    const bankDetails = paymentMethod.details as Record<string, unknown>;
+    if (!bankDetails.accountNumber || !bankDetails.bankCode) {
+      throw new BadRequestException('Bank account details (accountNumber, bankCode) are required');
+    }
+
+    // Create the bank account snapshot for the payout record
+    const bankAccount = {
+      bankName: bankDetails.bankName || 'Unknown Bank',
+      bankCode: bankDetails.bankCode,
+      accountNumber: bankDetails.accountNumber,
+      accountName: bankDetails.accountName || paymentMethod.label || 'Customer',
+      recipientCode: bankDetails.recipientCode || null, // Saved Paystack recipient code for reuse
+    };
+
+    // Request the payout via PayoutService (auto-approved + queued)
+    const payout = await this.payoutService.requestCustomerPayout(
+      customerProfileId,
+      dto.amount,
+      bankAccount,
+    );
+
+    return {
+      status: 'success',
+      data: {
+        payout,
+        message: 'Withdrawal is being processed. Funds will be sent to your bank account shortly.',
+      },
     };
   }
 

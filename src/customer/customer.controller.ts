@@ -147,19 +147,32 @@ export class CustomerController {
   }
 
   // ─────────────────────────────────────────────────────────────
-  //  2FA (Two-Factor Authentication)
+  //  2FA (Two-Factor Authentication) with TOTP
   // ─────────────────────────────────────────────────────────────
 
+  @Post('auth/2fa/setup')
+  @ApiOperation({ summary: 'Generate 2FA setup secret + QR code + backup codes' })
+  @ApiResponse({ status: 200, description: '2FA setup data returned (secret, QR code, backup codes)' })
+  @ApiResponse({ status: 409, description: '2FA already enabled' })
+  async setup2FA(@CurrentUser() user: { sub: string }) {
+    const result = await this.customerService.setup2FA(user.sub);
+    return { status: 'success', data: result };
+  }
+
   @Post('auth/2fa/enable')
-  @ApiOperation({ summary: 'Enable two-factor authentication' })
+  @ApiOperation({ summary: 'Enable two-factor authentication after setup' })
   @ApiResponse({ status: 200, description: '2FA enabled' })
-  @ApiResponse({ status: 400, description: 'Validation error' })
+  @ApiResponse({ status: 400, description: 'Validation error or setup not completed' })
   @ApiResponse({ status: 409, description: '2FA already enabled' })
   async enable2FA(
     @CurrentUser() user: { sub: string },
     @Body() dto: Enable2FaDto,
   ) {
-    const result = await this.customerService.enable2FA(user.sub, dto.password);
+    const result = await this.customerService.enable2FA(
+      user.sub,
+      dto.password,
+      dto.token,
+    );
     return { status: 'success', data: result };
   }
 

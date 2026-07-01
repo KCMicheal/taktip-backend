@@ -14,6 +14,7 @@ import { CustomerProfile } from './entities/customer-profile.entity';
 import { User } from '../auth/entities/user.entity';
 import { OtpService } from '../auth/services/otp.service';
 import { MailService } from '../auth/services/mail.service';
+import { TwoFactorService } from '../auth/services/two-factor.service';
 
 @Injectable()
 export class CustomerService {
@@ -26,6 +27,7 @@ export class CustomerService {
     private readonly userRepository: Repository<User>,
     private readonly otpService: OtpService,
     private readonly mailService: MailService,
+    private readonly twoFactorService: TwoFactorService,
   ) {}
 
   /**
@@ -224,15 +226,41 @@ export class CustomerService {
   }
 
   // ─────────────────────────────────────────────────────────────
-  //  2FA (Two-Factor Authentication)
+  //  2FA (Two-Factor Authentication) with TOTP
   // ─────────────────────────────────────────────────────────────
 
   /**
-   * Enable 2FA for the customer.
-   * Verifies the current password, then enables 2FA.
+   * Generate a TOTP setup secret + QR code + backup codes.
+   * The secret is saved provisionally — 2FA is NOT enabled until
+   * confirm2FASetup() is called with a valid TOTP code.
+   */
+  async setup2FA(userId: string): Promise<{
+    secret: string;
+    qrCode: string;
+    backupCodes: string[];
+  }> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.isTwoFactorEnabled) {
+      throw new ConflictException('Two-factor authentication is already enabled');
+    }
+
+    return this.twoFactorService.generateSetupSecret(userId, user.email);
+  }
+
+  /**
+   * Confirm and enable 2FA.
+   * Verifies current password + TOTP code before enabling.
    * Sends a confirmation email.
    */
-  async enable2FA(userId: string, password: string): Promise<{ message: string }> {
+  async enable2FA(
+    userId: string,
+    password: string,
+    token: string,
+  ): Promise<{ message: string }> {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException('User not found');
@@ -248,6 +276,18 @@ export class CustomerService {
       throw new UnauthorizedException('Current password is incorrect');
     }
 
+    // Verify TOTP code against the provisionally saved secret
+    if (!user.twoFactorSecret) {
+      throw new BadRequestException(
+        'Please generate a 2FA setup code first using POST /customer/auth/2fa/setup',
+      );
+    }
+
+    const isValid = this.twoFactorService.verifyTOTP(token, user.twoFactorSecret);
+    if (!isValid) {
+      throw new UnauthorizedException('Invalid two-factor authentication code');
+    }
+
     user.isTwoFactorEnabled = true;
     await this.userRepository.save(user);
 
@@ -255,11 +295,10 @@ export class CustomerService {
     try {
       await this.mailService.sendOtpEmail(
         user.email,
-        '2FA has been enabled on your account.',
+        'Two-factor authentication has been enabled on your TakTip account.',
         user.email.split('@')[0],
       );
     } catch {
-      // Non-blocking — log but don't fail
       this.logger.warn(`Failed to send 2FA confirmation email to ${user.email}`);
     }
 
@@ -269,12 +308,12 @@ export class CustomerService {
 
   /**
    * Disable 2FA for the customer.
-   * Verifies the current password, then disables 2FA.
+   * Verifies current password + TOTP code before disabling.
    */
   async disable2FA(
     userId: string,
     password: string,
-    _otp?: string,
+    token?: string,
   ): Promise<{ message: string }> {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
@@ -291,7 +330,12 @@ export class CustomerService {
       throw new UnauthorizedException('Current password is incorrect');
     }
 
+    // Validate TOTP or backup code before disabling
+    await this.twoFactorService.validateTwoFactorCode(user, token);
+
     user.isTwoFactorEnabled = false;
+    user.twoFactorSecret = null;
+    user.backupCodes = null;
     await this.userRepository.save(user);
 
     this.logger.log(`2FA disabled for user ${userId}`);

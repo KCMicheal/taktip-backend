@@ -492,7 +492,7 @@ describe('PayoutService', () => {
       await service.processPayout('payout-uuid');
 
       expect(payout.payoutStatus).toBe(PayoutStatus.FAILED);
-      expect(payout.notes).toContain('Staff wallet not found');
+      expect(payout.notes).toContain('Wallet not found for staff');
     });
   });
 
