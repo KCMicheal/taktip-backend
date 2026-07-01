@@ -29,7 +29,7 @@ import {
   SearchCustomersQueryDto,
 } from './dto/send-customer-tip.dto';
 import { PaginationService, PaginatedResult } from '../common/pagination';
-import { TipHistoryQueryDto, TipDirection, TipStatusFilter } from './dto/tip-history-query.dto';
+import { TipHistoryQueryDto, TipDirection, TipPeriod, TipStatusFilter } from './dto/tip-history-query.dto';
 
 /**
  * Maximum tip amount per transaction (user-defined limit).
@@ -474,6 +474,7 @@ export class CustomerTipsService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const direction = query.direction ?? TipDirection.ALL;
+    const period = query.period ?? TipPeriod.ALL;
     const status = query.status ?? TipStatusFilter.ALL;
 
     // ── Build dynamic query ──────────────────────────────────────────────────
@@ -507,8 +508,14 @@ export class CustomerTipsService {
     }
 
     // Period — use JS-calculated date to avoid INTERVAL param-binding issues
-    if (query.period !== undefined) {
-      const cutoff = new Date(Date.now() - query.period * 24 * 60 * 60 * 1000);
+    if (period !== TipPeriod.ALL) {
+      const days =
+        period === TipPeriod.SEVEN_DAYS
+          ? 7
+          : period === TipPeriod.THIRTY_DAYS
+            ? 30
+            : 90;
+      const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
       queryBuilder.andWhere('tip.createdAt >= :cutoff', { cutoff });
     }
 
