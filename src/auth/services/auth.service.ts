@@ -85,6 +85,7 @@ export class AuthService {
       role: user.role,
       isVerified: user.isEmailVerified,
       isActive: user.isActive,
+      isTwoFactorEnabled: user.isTwoFactorEnabled,
       createdAt: user.createdAt,
     };
 

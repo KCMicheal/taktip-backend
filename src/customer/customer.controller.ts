@@ -49,6 +49,7 @@ export class CustomerController {
         firstName: profile.user.firstName,
         lastName: profile.user.lastName,
         phone: profile.user.phone,
+        isTwoFactorEnabled: profile.user.isTwoFactorEnabled,
         notificationPreferences: profile.notificationPreferences,
         preferences: profile.preferences,
         paymentMethods: profile.paymentMethods,
