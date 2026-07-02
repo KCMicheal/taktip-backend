@@ -34,7 +34,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const extra: Record<string, unknown> = {};
 
     if (exception instanceof HttpException) {
-      const httpException = exception as HttpException;
+      const httpException = exception;
       status = httpException.getStatus();
       const exceptionResponse = httpException.getResponse();
 
@@ -44,7 +44,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       } else if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
         const responseObj = exceptionResponse as Record<string, unknown>;
         if (typeof responseObj.message === 'string') {
-          message = responseObj.message as string;
+          message = responseObj.message;
         } else if (Array.isArray(responseObj.message)) {
           // Handle validation errors array
           message = responseObj.message.join(', ');
