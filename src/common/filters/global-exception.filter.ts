@@ -11,12 +11,15 @@ import { Response } from 'express';
 export interface ErrorResponse {
   status: number;
   message: string;
-  data: null;
+  [key: string]: unknown;
 }
 
 /**
  * Global exception filter that formats all errors as:
- * { status: false, message: string, data: null }
+ * { status: <httpCode>, message: <string>, ...extraProperties }
+ *
+ * Extra properties from HttpException response objects (e.g. requiresTwoFactor)
+ * are passed through so frontend can detect specific error conditions.
  */
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
@@ -28,21 +31,30 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = 'Internal server error';
+    const extra: Record<string, unknown> = {};
 
     if (exception instanceof HttpException) {
-      status = exception.getStatus();
-      const exceptionResponse = exception.getResponse();
+      const httpException = exception as HttpException;
+      status = httpException.getStatus();
+      const exceptionResponse = httpException.getResponse();
 
-      // Extract message from HttpException response
+      // Extract message and extra properties from HttpException response
       if (typeof exceptionResponse === 'string') {
         message = exceptionResponse;
       } else if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
         const responseObj = exceptionResponse as Record<string, unknown>;
         if (typeof responseObj.message === 'string') {
-          message = responseObj.message;
+          message = responseObj.message as string;
         } else if (Array.isArray(responseObj.message)) {
           // Handle validation errors array
           message = responseObj.message.join(', ');
+        }
+
+        // Pass through extra properties (e.g. requiresTwoFactor)
+        for (const [key, value] of Object.entries(responseObj)) {
+          if (key !== 'message' && key !== 'statusCode' && key !== 'error') {
+            extra[key] = value;
+          }
         }
       }
     } else if (exception instanceof Error) {
@@ -57,7 +69,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const errorResponse: ErrorResponse = {
       status,
       message,
-      data: null,
+      ...extra,
     };
 
     response.status(status).json(errorResponse);

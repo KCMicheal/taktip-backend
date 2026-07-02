@@ -1,5 +1,6 @@
 export * from './register-merchant.dto';
 export * from './register-customer.dto';
+export * from './setup-2fa.dto';
 export * from './verify-otp.dto';
 export * from './resend-otp.dto';
 export * from './login.dto';

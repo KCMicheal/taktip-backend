@@ -16,6 +16,7 @@ import { Role } from '@/auth/enums/role.enum';
 import { Merchant } from '@/merchant/entities/merchant.entity';
 import { MerchantService } from '@/merchant/merchant.service';
 import { CustomerService } from '@/customer/customer.service';
+import { TwoFactorService } from '@/auth/services/two-factor.service';
 import { StaffProfile } from '@/staff/entities/staff-profile.entity';
 
 jest.mock('bcrypt');
@@ -37,6 +38,7 @@ describe('AuthService', () => {
   let tokenService: jest.Mocked<TokenService>;
   let merchantService: jest.Mocked<MerchantService>;
   let customerService: jest.Mocked<CustomerService>;
+  let twoFactorService: jest.Mocked<TwoFactorService>;
 
   const mockUser: Partial<User> = {
     id: 'test-uuid',
@@ -128,6 +130,15 @@ describe('AuthService', () => {
           },
         },
         {
+          provide: TwoFactorService,
+          useValue: {
+            generateSetupSecret: jest.fn(),
+            verifyTOTP: jest.fn(),
+            verifyBackupCode: jest.fn(),
+            validateTwoFactorCode: jest.fn(),
+          },
+        },
+        {
           provide: getRepositoryToken(StaffProfile),
           useValue: {
             find: jest.fn(),
@@ -144,6 +155,7 @@ describe('AuthService', () => {
     tokenService = module.get(TokenService);
     merchantService = module.get(MerchantService);
     customerService = module.get(CustomerService);
+    twoFactorService = module.get(TwoFactorService);
   });
 
   afterEach(() => {

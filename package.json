@@ -46,6 +46,7 @@
     "jsonwebtoken": "^9.0.3",
     "node-mailjet": "^6.0.11",
     "nodemailer": "^8.0.5",
+    "otplib": "^13.4.1",
     "passport": "^0.6.0",
     "paystack-api": "^2.0.6",
     "pg": "^8.11.3",

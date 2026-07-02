@@ -42,6 +42,9 @@ import {
   ResetPasswordResponseDto,
   ChangePasswordResponseDto,
   ErrorResponseDto,
+  Enable2FaDto,
+  Disable2FaDto,
+  Setup2FaResponseDto,
 } from "../dto";
 import { AcceptInviteDto } from "../../merchant/dto/invite.dto";
 
@@ -385,5 +388,70 @@ export class AuthController {
   })
   async logoutAll(@CurrentUser() user: UserResponse) {
     return this.authService.logoutAll(user.sub);
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  //  2FA (Two-Factor Authentication) — shared for all user types
+  // ─────────────────────────────────────────────────────────────
+
+  @Post("2fa/setup")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Generate 2FA setup secret + QR code + backup codes (all authenticated users)" })
+  @ApiResponse({
+    status: 200,
+    description: "2FA setup data returned (secret, QR code, backup codes)",
+    type: Setup2FaResponseDto,
+  })
+  @ApiResponse({ status: 409, description: "2FA already enabled" })
+  async setup2FA(@CurrentUser() user: UserResponse) {
+    const result = await this.authService.setup2FA(user.sub);
+    return { status: "success", data: result };
+  }
+
+  @Post("2fa/enable")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Enable two-factor authentication after setup (all authenticated users)" })
+  @ApiResponse({
+    status: 200,
+    description: "2FA enabled successfully",
+  })
+  @ApiResponse({ status: 400, description: "Validation error or setup not completed" })
+  @ApiResponse({ status: 409, description: "2FA already enabled" })
+  async enable2FA(
+    @CurrentUser() user: UserResponse,
+    @Body() dto: Enable2FaDto,
+  ) {
+    const result = await this.authService.enable2FA(
+      user.sub,
+      dto.password,
+      dto.token,
+    );
+    return { status: "success", data: result };
+  }
+
+  @Post("2fa/disable")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Disable two-factor authentication (all authenticated users)" })
+  @ApiResponse({
+    status: 200,
+    description: "2FA disabled successfully",
+  })
+  @ApiResponse({ status: 400, description: "Validation error" })
+  async disable2FA(
+    @CurrentUser() user: UserResponse,
+    @Body() dto: Disable2FaDto,
+  ) {
+    const result = await this.authService.disable2FA(
+      user.sub,
+      dto.password,
+      dto.otp,
+    );
+    return { status: "success", data: result };
   }
 }
