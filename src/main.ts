@@ -3,6 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import cookieParser from 'cookie-parser';
 import { SchemaObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface';
 import { AppModule } from './app.module';
 import { AuthModule } from './auth/auth.module';
@@ -161,6 +162,9 @@ async function bootstrap() {
   });
 
   console.log(`🌐 CORS enabled for origins: ${originsArray.join(', ')}`);
+
+  // ========== Cookie Parser Middleware ==========
+  app.use(cookieParser());
 
   // API versioning configuration
   const apiVersion = configService.get<string>('API_VERSION', 'v1') ?? 'v1';

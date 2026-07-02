@@ -7,6 +7,8 @@ import {
   HttpStatus,
   Headers,
   UseGuards,
+  Res,
+  Req,
 } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
 import {
@@ -47,6 +49,7 @@ import {
   Setup2FaResponseDto,
 } from "../dto";
 import { AcceptInviteDto } from "../../merchant/dto/invite.dto";
+import { Response, Request } from "express";
 
 @ApiTags("auth")
 @Controller("auth")
@@ -55,6 +58,18 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly inviteService: InviteService,
   ) {}
+
+  private getRefreshCookieOptions() {
+    return {
+      httpOnly: true,
+      secure:
+        process.env.NODE_ENV === "production" ||
+        process.env.NODE_ENV === "staging",
+      sameSite: "strict" as const,
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      path: "/api/v1/auth",
+    };
+  }
 
   @Post("register/merchant")
   @HttpCode(HttpStatus.CREATED)
@@ -220,8 +235,10 @@ export class AuthController {
     description: "Too many requests",
     type: ErrorResponseDto,
   })
-  async login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  async login(@Body() dto: LoginDto, @Res({ passthrough: false }) res: Response) {
+    const result = await this.authService.login(dto);
+    res.cookie("refreshToken", result.refreshToken, this.getRefreshCookieOptions());
+    return res.status(200).json(result);
   }
 
   @Post("refresh")
@@ -238,8 +255,19 @@ export class AuthController {
     description: "Invalid or expired refresh token",
     type: ErrorResponseDto,
   })
-  async refreshTokens(@Body() dto: RefreshTokenDto) {
-    return this.authService.refreshTokens(dto);
+  async refreshTokens(
+    @Body() dto: RefreshTokenDto,
+    @Res({ passthrough: false }) res: Response,
+    @Req() req: Request,
+  ) {
+    const refreshToken =
+      req.cookies?.refreshToken || dto.refreshToken;
+    if (!refreshToken) {
+      return res.status(401).json({ message: "Refresh token not provided" });
+    }
+    const result = await this.authService.refreshTokens({ refreshToken });
+    res.cookie("refreshToken", result.refreshToken, this.getRefreshCookieOptions());
+    return res.status(200).json(result);
   }
 
   @Post("forgot-password")
@@ -366,9 +394,18 @@ export class AuthController {
     @Body() dto: RefreshTokenDto,
     @Headers("x-forwarded-for") forwardedIp: string,
     @CurrentUser() _user: UserResponse,
+    @Res({ passthrough: false }) res: Response,
+    @Req() req: Request,
   ) {
+    const refreshToken =
+      req.cookies?.refreshToken || dto.refreshToken;
     const ip = forwardedIp || "unknown";
-    return this.authService.logout(dto, ip);
+    res.clearCookie("refreshToken", this.getRefreshCookieOptions());
+    if (!refreshToken) {
+      return res.status(200).json({ message: "Logged out successfully" });
+    }
+    const result = await this.authService.logout({ refreshToken }, ip);
+    return res.status(200).json(result);
   }
 
   @Post("logout-all")
@@ -386,8 +423,13 @@ export class AuthController {
     description: "Unauthorized",
     type: ErrorResponseDto,
   })
-  async logoutAll(@CurrentUser() user: UserResponse) {
-    return this.authService.logoutAll(user.sub);
+  async logoutAll(
+    @CurrentUser() user: UserResponse,
+    @Res({ passthrough: false }) res: Response,
+  ) {
+    res.clearCookie("refreshToken", this.getRefreshCookieOptions());
+    const result = await this.authService.logoutAll(user.sub);
+    return res.status(200).json(result);
   }
 
   // ─────────────────────────────────────────────────────────────
