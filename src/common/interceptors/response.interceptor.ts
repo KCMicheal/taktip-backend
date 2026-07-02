@@ -32,14 +32,15 @@ export class ResponseInterceptor<T> implements NestInterceptor<T, ResponseWrappe
 
     return next.handle().pipe(
       map((data: unknown): ResponseWrapper<T> => {
-        // Some controllers manually return { status: 'success', data: ... }
-        // Detect and unwrap to prevent double-wrapping
+        // Some controllers manually return { status: 'success', message?, data: ... }
+        // Detect and unwrap to prevent double-wrapping.
+        // Preserve the controller's custom message when present.
         if (data && typeof data === 'object' && 'status' in data) {
           const responseData = data as Record<string, unknown>;
           if (responseData.status === 'success') {
             return {
               status: statusCode,
-              message: 'Success',
+              message: (typeof responseData.message === 'string' && responseData.message) || 'Success',
               data: responseData.data as T ?? null,
             };
           }

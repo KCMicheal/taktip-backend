@@ -11,6 +11,7 @@ import {
   Inject,
   Req,
   NotFoundException,
+  BadRequestException,
   Query,
 } from '@nestjs/common';
 import { Request } from 'express';
@@ -247,7 +248,7 @@ export class PaymentsController {
     @Query('reference') reference: string,
   ) {
     if (!reference) {
-      return { status: 'error', message: 'Reference query parameter is required' };
+      throw new BadRequestException('Reference query parameter is required');
     }
 
     const payment = await this.paymentRepository.findOne({
@@ -255,7 +256,7 @@ export class PaymentsController {
     });
 
     if (!payment) {
-      return { status: 'error', message: 'Payment not found' };
+      throw new NotFoundException('Payment not found');
     }
 
     // If the payment has a tipId, look up the tip status
@@ -342,7 +343,7 @@ export class PaymentsController {
       });
 
       if (!qrCode || !qrCode.staffProfileId || !qrCode.merchantId) {
-        return { status: 'error', data: null };
+        throw new NotFoundException('QR code not found or inactive');
       }
 
       merchantId = qrCode.merchantId;
@@ -357,7 +358,7 @@ export class PaymentsController {
       });
 
       if (!profile) {
-        return { status: 'error', data: null };
+        throw new NotFoundException('Staff profile not found for this merchant');
       }
 
       merchantId = dto.merchantId;
@@ -365,7 +366,7 @@ export class PaymentsController {
       sourceLabel = `merchant: ${dto.merchantId}, staff: ${dto.staffProfileId}`;
     } else {
       // Neither shape was provided
-      return { status: 'error', data: null };
+      throw new BadRequestException('Invalid payload: provide either qrCodeId or merchantId+staffProfileId');
     }
 
     // ── Create a Tip record with PENDING status and GUEST source ──
@@ -441,24 +442,8 @@ export class PaymentsController {
     },
   })
   @ApiResponse({
-    status: 200,
-    description: 'Signature verification failed',
-    schema: {
-      type: 'object',
-      properties: {
-        status: { type: 'string', example: 'signature verification failed' },
-      },
-    },
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Missing event or data in payload',
-    schema: {
-      type: 'object',
-      properties: {
-        status: { type: 'string', example: 'invalid payload' },
-      },
-    },
+    status: 400,
+    description: 'Signature verification failed or invalid payload',
   })
   async handleWebhook(
     @Headers('x-paystack-signature') signature: string,
@@ -473,7 +458,7 @@ export class PaymentsController {
       this.logger.warn(
         `[${this.paymentProvider.name}] Webhook signature verification failed`,
       );
-      return { status: 'signature verification failed' };
+      throw new BadRequestException('Signature verification failed');
     }
 
     const event = body.event as string | undefined;
@@ -481,7 +466,7 @@ export class PaymentsController {
 
     if (!event || !data) {
       this.logger.warn(`[${this.paymentProvider.name}] Webhook missing event or data`);
-      return { status: 'invalid payload' };
+      throw new BadRequestException('Invalid webhook payload: missing event or data');
     }
 
     this.logger.log(

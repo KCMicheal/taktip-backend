@@ -2,18 +2,12 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-  BadRequestException,
-  ConflictException,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 import { CustomerProfile } from './entities/customer-profile.entity';
 import { User } from '../auth/entities/user.entity';
-import { OtpService } from '../auth/services/otp.service';
-import { MailService } from '../auth/services/mail.service';
 
 @Injectable()
 export class CustomerService {
@@ -24,8 +18,6 @@ export class CustomerService {
     private readonly customerProfileRepository: Repository<CustomerProfile>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
-    private readonly otpService: OtpService,
-    private readonly mailService: MailService,
   ) {}
 
   /**
@@ -221,80 +213,5 @@ export class CustomerService {
     await this.customerProfileRepository.save(profile);
 
     this.logger.log(`Payment method deleted for user ${userId}: ${methodId}`);
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  //  2FA (Two-Factor Authentication)
-  // ─────────────────────────────────────────────────────────────
-
-  /**
-   * Enable 2FA for the customer.
-   * Verifies the current password, then enables 2FA.
-   * Sends a confirmation email.
-   */
-  async enable2FA(userId: string, password: string): Promise<{ message: string }> {
-    const user = await this.userRepository.findOne({ where: { id: userId } });
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-
-    if (user.isTwoFactorEnabled) {
-      throw new ConflictException('Two-factor authentication is already enabled');
-    }
-
-    // Verify current password
-    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Current password is incorrect');
-    }
-
-    user.isTwoFactorEnabled = true;
-    await this.userRepository.save(user);
-
-    // Send confirmation email
-    try {
-      await this.mailService.sendOtpEmail(
-        user.email,
-        '2FA has been enabled on your account.',
-        user.email.split('@')[0],
-      );
-    } catch {
-      // Non-blocking — log but don't fail
-      this.logger.warn(`Failed to send 2FA confirmation email to ${user.email}`);
-    }
-
-    this.logger.log(`2FA enabled for user ${userId}`);
-    return { message: 'Two-factor authentication has been enabled successfully.' };
-  }
-
-  /**
-   * Disable 2FA for the customer.
-   * Verifies the current password, then disables 2FA.
-   */
-  async disable2FA(
-    userId: string,
-    password: string,
-    _otp?: string,
-  ): Promise<{ message: string }> {
-    const user = await this.userRepository.findOne({ where: { id: userId } });
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-
-    if (!user.isTwoFactorEnabled) {
-      throw new BadRequestException('Two-factor authentication is not enabled');
-    }
-
-    // Verify current password
-    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Current password is incorrect');
-    }
-
-    user.isTwoFactorEnabled = false;
-    await this.userRepository.save(user);
-
-    this.logger.log(`2FA disabled for user ${userId}`);
-    return { message: 'Two-factor authentication has been disabled successfully.' };
   }
 }
