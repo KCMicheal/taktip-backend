@@ -491,6 +491,137 @@ export class PaystackProvider implements PaymentProvider {
     );
   }
 
+  // ───────── Transfer / Payout methods ─────────
+
+  /**
+   * Create a transfer recipient (Paystack: Transfer Recipient).
+   *
+   * This is called once per customer bank account. The returned
+   * `recipientCode` should be saved alongside the customer's payment
+   * method for reuse on subsequent withdrawals.
+   */
+  async createTransferRecipient(params: {
+    name: string;
+    accountNumber: string;
+    bankCode: string;
+    currency?: string;
+  }): Promise<{ recipientCode: string; active: boolean }> {
+    try {
+      const response = await this.paystack.transfer_recipient.create({
+        type: 'nuban',
+        name: params.name,
+        account_number: params.accountNumber,
+        bank_code: params.bankCode,
+        currency: params.currency || 'NGN',
+      });
+
+      this.logger.log(
+        `Transfer recipient created: ${response.data.recipient_code} for ${params.accountNumber}`,
+      );
+
+      return {
+        recipientCode: response.data.recipient_code,
+        active: response.data.active,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to create transfer recipient: ${errorMessage}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Initiate a payout (Paystack: Transfer).
+   *
+   * Amount must be in **kobo** (the smallest currency unit).
+   * The calling service is responsible for converting from major units.
+   */
+  async initiateTransfer(params: {
+    amount: number;
+    recipientCode: string;
+    reference?: string;
+    reason?: string;
+  }): Promise<{
+    transferCode: string;
+    reference: string;
+    status: string;
+  }> {
+    const reference = params.reference || this.generateReference();
+    const reason = params.reason || 'Wallet withdrawal';
+
+    try {
+      const response = await this.paystack.transfer.create({
+        source: 'balance',
+        amount: params.amount, // kobo
+        recipient: params.recipientCode,
+        reference,
+        reason,
+      });
+
+      this.logger.log(
+        `Transfer initiated: ${response.data.transfer_code} (ref: ${response.data.reference}) — ${response.data.amount} kobo`,
+      );
+
+      return {
+        transferCode: response.data.transfer_code,
+        reference: response.data.reference,
+        status: response.data.status,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to initiate transfer: ${errorMessage}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Verify a transfer (Paystack: Transfer verification).
+   */
+  async verifyTransfer(reference: string): Promise<{
+    transferCode: string;
+    reference: string;
+    amount: number;
+    status: string;
+    failureReason?: string;
+  }> {
+    try {
+      const response = await this.paystack.transfer.verify({ reference });
+
+      this.logger.log(
+        `Transfer verified: ${response.data.transfer_code} (ref: ${response.data.reference}) — status: ${response.data.status}`,
+      );
+
+      return {
+        transferCode: response.data.transfer_code,
+        reference: response.data.reference,
+        amount: response.data.amount,
+        status: response.data.status,
+        failureReason: response.data.failure_reason,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to verify transfer: ${errorMessage}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Check the Paystack balance on the integration.
+   */
+  async checkProviderBalance(): Promise<Array<{ currency: string; balance: number }>> {
+    try {
+      const response = await this.paystack.transfer_control.balance();
+      return response.data.map((b: { currency: string; balance: number }) => ({
+        currency: b.currency,
+        balance: b.balance,
+      }));
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to check provider balance: ${errorMessage}`);
+      throw error;
+    }
+  }
+
   // ───────── Signature verification ─────────
 
   /**

@@ -7,6 +7,10 @@ export class Payout extends BaseEntity {
   @Column({ type: 'uuid', name: 'staff_profile_id' })
   staffProfileId: string;
 
+  @Column({ type: 'uuid', nullable: true, name: 'customer_profile_id' })
+  @Index()
+  customerProfileId: string | null;
+
   @Column({ type: 'uuid', nullable: true, name: 'merchant_id' })
   @Index()
   merchantId: string | null;

@@ -94,4 +94,50 @@ export interface PaymentProvider {
    * Returns true if the signature is valid.
    */
   verifyWebhookSignature(signature: string, rawBody: string): boolean;
+
+  // ───────── Transfer / Payout methods ─────────
+
+  /**
+   * Create a transfer recipient on the provider's side.
+   * Returns the provider's recipient code (e.g., Paystack's `recipient_code`).
+   */
+  createTransferRecipient(params: {
+    name: string;
+    accountNumber: string;
+    bankCode: string;
+    currency?: string;
+  }): Promise<{ recipientCode: string; active: boolean }>;
+
+  /**
+   * Initiate a transfer (payout) to a previously created recipient.
+   * Amount should be in the smallest currency unit (e.g., kobo for NGN).
+   * Returns the provider's transfer reference / code.
+   */
+  initiateTransfer(params: {
+    amount: number;
+    recipientCode: string;
+    reference?: string;
+    reason?: string;
+  }): Promise<{
+    transferCode: string;
+    reference: string;
+    status: string;
+  }>;
+
+  /**
+   * Verify a transfer by reference.
+   * Returns the current status of the transfer.
+   */
+  verifyTransfer(reference: string): Promise<{
+    transferCode: string;
+    reference: string;
+    amount: number;
+    status: string;
+    failureReason?: string;
+  }>;
+
+  /**
+   * Check the provider's account balance.
+   */
+  checkProviderBalance(): Promise<Array<{ currency: string; balance: number }>>;
 }
