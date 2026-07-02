@@ -429,6 +429,61 @@ curl -X POST http://localhost:3001/api/v1/auth/register/merchant \
 
 ---
 
+## 11. Security Vulnerabilities — Pre-Commit Checklist
+
+### CRITICAL: Refresh Token XSS Vulnerability (FE — localStorage)
+
+**Status:** OPEN — must be fixed before production launch.
+
+**The Problem:**
+The FE currently stores the refresh token in `localStorage`. Any JavaScript running on the page (including injected XSS payloads) can read `localStorage` freely. This means an attacker who injects malicious script can steal the refresh token and silently generate new access tokens, maintaining persistent unauthorized access even after the user's session "expires."
+
+**Backend Behavior (verified):**
+- `POST /auth/login` returns `refreshToken` as a plaintext string in the JSON response body (`response.dto.ts:30`).
+- The refresh token is a 128-char hex string (`randomBytes(64).toString('hex')`).
+- Backend stores a bcrypt hash of the token in the `refresh_tokens` table — so the backend DB is secure.
+- The vulnerability is **purely on the FE side**: the token is exposed in transit (over the wire, but HTTPS protects this) and at rest in `localStorage`.
+
+**Why This Matters:**
+- XSS is the most common web vulnerability class. Even with CSP, frameworks (React, Next.js) occasionally have bypasses.
+- A stolen refresh token lets an attacker silently renew access tokens without the user's knowledge.
+- Unlike the access token (short-lived, 30 min), the refresh token lives for 7 days by default — a much larger attack window.
+
+**The Fix (FE team must implement):**
+1. **Move refresh token to an `httpOnly`, `Secure`, `SameSite=Strict` cookie** set by the backend on login/refresh. JavaScript cannot read `httpOnly` cookies — XSS cannot steal it.
+2. The backend should set the cookie on `POST /auth/login` and `POST /auth/refresh` responses.
+3. The FE interceptor should stop reading from `localStorage` and instead let the browser automatically include the cookie on requests.
+4. The backend refresh endpoint (`POST /auth/refresh`) should read the token from the cookie, not from the request body.
+
+**Backend changes needed to support this:**
+```typescript
+// In auth.controller.ts — set cookie on login response
+res.cookie('refreshToken', result.refreshToken, {
+  httpOnly: true,
+  secure: true,          // HTTPS only
+  sameSite: 'strict',
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  path: '/api/v1/auth',  // restrict cookie to auth routes
+});
+```
+
+### Pre-Commit Security Checklist
+
+Before **every** commit, PR, or merge, verify:
+
+- [ ] **No secrets in code** — no API keys, passwords, tokens, or connection strings hardcoded in source files (use `.env` + `ConfigModule`).
+- [ ] **No PII in logs** — never log full email addresses, phone numbers, passwords, or tokens in production log level. Dev-mode logging (e.g., OTP codes) is acceptable behind `NODE_ENV=development` guards.
+- [ ] **Auth endpoints are guarded** — every protected route has `@UseGuards(JwtAuthGuard)` and role-based guards where applicable.
+- [ ] **Input validation** — all DTOs use `class-validator` decorators (`@IsString`, `@IsEmail`, `@MinLength`, etc.). No endpoint accepts unvalidated input.
+- [ ] **SQL injection** — no raw query interpolation. Use parameterized queries or TypeORM query builder.
+- [ ] **Refresh token handling** — refresh tokens are hashed (bcrypt) before DB storage. The plaintext token is returned **once** to the FE and never stored on the backend.
+- [ ] **Rate limiting** — auth endpoints (login, register, OTP, password reset) are rate-limited via `@Throttle()`.
+- [ ] **CORS** — only whitelisted origins are allowed (configured in `main.ts`).
+- [ ] **Error messages** — generic error messages for auth failures (no "user exists" vs "user not found" disclosure).
+- [ ] **Ownership checks** — protected resource modifications verify the authenticated user owns the resource.
+
+---
+
 ## Common Patterns
 
 ### NestJS Module Structure
@@ -454,5 +509,5 @@ src/module/
 
 ---
 
-*Last Updated: 2026-06-30*
-*Version: 4.0 — Rebased PR workflow: sync-first strategy + divergence prevention rules*
+*Last Updated: 2026-07-02*
+*Version: 5.0 — Added security vulnerability registry + pre-commit security checklist*
