@@ -417,6 +417,12 @@ export class AuthService {
   /**
    * Confirm and enable 2FA.
    * Verifies current password + TOTP code before enabling.
+   *
+   * Flow:
+   * 1. Retrieve the pending setup from Redis (stored by /2fa/setup)
+   * 2. Verify TOTP code against the cached secret
+   * 3. On success: persist secret + backup codes to DB, set isTwoFactorEnabled, clear cache
+   * 4. If cache expired: user must re-run /2fa/setup
    */
   async enable2FA(
     userId: string,
@@ -438,20 +444,30 @@ export class AuthService {
       throw new UnauthorizedException('Current password is incorrect');
     }
 
-    // Verify TOTP code against the provisionally saved secret
-    if (!user.twoFactorSecret) {
+    // Retrieve pending setup from Redis (NOT from DB)
+    const pendingSetup = await this.twoFactorService.getPendingSetup(userId);
+    if (!pendingSetup) {
       throw new BadRequestException(
-        'Please generate a 2FA setup code first using POST /auth/2fa/setup',
+        '2FA setup has expired or was never initiated. Please generate a new setup code using POST /auth/2fa/setup',
       );
     }
 
-    const isValid = this.twoFactorService.verifyTOTP(token, user.twoFactorSecret);
+    // Verify TOTP code against the cached secret
+    const isValid = this.twoFactorService.verifyTOTP(token, pendingSetup.secret);
     if (!isValid) {
       throw new UnauthorizedException('Invalid two-factor authentication code');
     }
 
+    // Persist secret + backup codes + enable flag all at once (single save)
+    user.twoFactorSecret = pendingSetup.secret;
+    user.backupCodes = pendingSetup.hashedBackupCodes;
     user.isTwoFactorEnabled = true;
     await this.userRepository.save(user);
+
+    this.logger.log(`2FA setup persisted to DB for user ${userId}`);
+
+    // Clear the pending setup from Redis (no longer needed)
+    await this.twoFactorService.clearPendingSetup(userId);
 
     // Send confirmation email
     try {

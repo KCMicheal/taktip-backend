@@ -133,6 +133,9 @@ describe('AuthService', () => {
           provide: TwoFactorService,
           useValue: {
             generateSetupSecret: jest.fn(),
+            getPendingSetup: jest.fn(),
+            persistSetupToDB: jest.fn(),
+            clearPendingSetup: jest.fn(),
             verifyTOTP: jest.fn(),
             verifyBackupCode: jest.fn(),
             validateTwoFactorCode: jest.fn(),
@@ -570,6 +573,109 @@ describe('AuthService', () => {
       await expect(
         authService.changePassword('test-uuid', 'CurrentPass123', 'NewSecurePass123', null as unknown as Role),
       ).rejects.toThrow('Invalid user role');
+    });
+  });
+
+  describe('setup2FA', () => {
+    it('should generate 2FA setup secret and store in Redis cache', async () => {
+      const userWithout2FA = { ...mockUser, isTwoFactorEnabled: false };
+      userRepository.findOne.mockResolvedValue(userWithout2FA as User);
+      twoFactorService.generateSetupSecret.mockResolvedValue({
+        secret: 'JBSWY3DPEHPK3PXP',
+        qrCode: 'data:image/png;base64,...',
+        backupCodes: ['CODE1', 'CODE2'],
+      });
+
+      const result = await authService.setup2FA('test-uuid');
+
+      expect(result.secret).toBe('JBSWY3DPEHPK3PXP');
+      expect(result.qrCode).toBe('data:image/png;base64,...');
+      expect(twoFactorService.generateSetupSecret).toHaveBeenCalledWith('test-uuid', 'test@example.com');
+    });
+
+    it('should throw ConflictException if 2FA is already enabled', async () => {
+      const userWith2FA = { ...mockUser, isTwoFactorEnabled: true };
+      userRepository.findOne.mockResolvedValue(userWith2FA as User);
+
+      await expect(authService.setup2FA('test-uuid')).rejects.toThrow(ConflictException);
+      await expect(authService.setup2FA('test-uuid')).rejects.toThrow('Two-factor authentication is already enabled');
+    });
+
+    it('should throw NotFoundException if user not found', async () => {
+      userRepository.findOne.mockResolvedValue(null);
+
+      await expect(authService.setup2FA('nonexistent')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('enable2FA', () => {
+    const enableDto = { password: 'SecurePass123', token: '123456' };
+
+    it('should enable 2FA after verifying password and TOTP from Redis cache', async () => {
+      const userWithout2FA = { ...mockUser, isTwoFactorEnabled: false };
+      userRepository.findOne.mockResolvedValue(userWithout2FA as User);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+      twoFactorService.getPendingSetup.mockResolvedValue({
+        secret: 'JBSWY3DPEHPK3PXP',
+        hashedBackupCodes: ['hashed1', 'hashed2'],
+      });
+      twoFactorService.verifyTOTP.mockReturnValue(true);
+      userRepository.save.mockResolvedValue(userWithout2FA as User);
+      mailService.sendOtpEmail.mockResolvedValue(undefined);
+
+      const result = await authService.enable2FA('test-uuid', enableDto.password, enableDto.token);
+
+      expect(result.message).toBe('Two-factor authentication has been enabled successfully.');
+      expect(twoFactorService.getPendingSetup).toHaveBeenCalledWith('test-uuid');
+      expect(twoFactorService.verifyTOTP).toHaveBeenCalledWith('123456', 'JBSWY3DPEHPK3PXP');
+      // Secret + backup codes are set directly on the user object (single save)
+      expect(userWithout2FA.twoFactorSecret).toBe('JBSWY3DPEHPK3PXP');
+      expect(userWithout2FA.backupCodes).toEqual(['hashed1', 'hashed2']);
+      expect(userWithout2FA.isTwoFactorEnabled).toBe(true);
+      expect(userRepository.save).toHaveBeenCalledTimes(1);
+      expect(twoFactorService.clearPendingSetup).toHaveBeenCalledWith('test-uuid');
+    });
+
+    it('should throw BadRequestException if setup expired in Redis', async () => {
+      const userWithout2FA = { ...mockUser, isTwoFactorEnabled: false };
+      userRepository.findOne.mockResolvedValue(userWithout2FA as User);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+      twoFactorService.getPendingSetup.mockResolvedValue(null);
+
+      await expect(authService.enable2FA('test-uuid', enableDto.password, enableDto.token)).rejects.toThrow(BadRequestException);
+      await expect(authService.enable2FA('test-uuid', enableDto.password, enableDto.token)).rejects.toThrow(
+        '2FA setup has expired or was never initiated',
+      );
+    });
+
+    it('should throw UnauthorizedException if TOTP code is invalid', async () => {
+      const userWithout2FA = { ...mockUser, isTwoFactorEnabled: false };
+      userRepository.findOne.mockResolvedValue(userWithout2FA as User);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+      twoFactorService.getPendingSetup.mockResolvedValue({
+        secret: 'JBSWY3DPEHPK3PXP',
+        hashedBackupCodes: ['hashed1'],
+      });
+      twoFactorService.verifyTOTP.mockReturnValue(false);
+
+      await expect(authService.enable2FA('test-uuid', enableDto.password, 'wrong')).rejects.toThrow(UnauthorizedException);
+      await expect(authService.enable2FA('test-uuid', enableDto.password, 'wrong')).rejects.toThrow('Invalid two-factor authentication code');
+    });
+
+    it('should throw ConflictException if 2FA is already enabled', async () => {
+      const userWith2FA = { ...mockUser, isTwoFactorEnabled: true };
+      userRepository.findOne.mockResolvedValue(userWith2FA as User);
+
+      await expect(authService.enable2FA('test-uuid', enableDto.password, enableDto.token)).rejects.toThrow(ConflictException);
+    });
+
+    it('should throw UnauthorizedException if password is incorrect', async () => {
+      const userWithout2FA = { ...mockUser, isTwoFactorEnabled: false };
+      userRepository.findOne.mockResolvedValue(userWithout2FA as User);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+
+      await expect(authService.enable2FA('test-uuid', 'WrongPassword', enableDto.token)).rejects.toThrow(UnauthorizedException);
+      await expect(authService.enable2FA('test-uuid', 'WrongPassword', enableDto.token)).rejects.toThrow('Current password is incorrect');
     });
   });
 });

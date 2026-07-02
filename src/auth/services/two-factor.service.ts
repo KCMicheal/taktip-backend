@@ -10,6 +10,7 @@ import { generateSecret, verifySync, generateURI } from 'otplib';
 import * as QRCode from 'qrcode';
 import * as crypto from 'crypto';
 import { User } from '../entities/user.entity';
+import { TwoFactorSetupCacheService } from './two-factor-setup-cache.service';
 
 @Injectable()
 export class TwoFactorService {
@@ -19,12 +20,16 @@ export class TwoFactorService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly configService: ConfigService,
+    private readonly setupCache: TwoFactorSetupCacheService,
   ) {}
 
   /**
    * Generate a TOTP secret and QR code for authenticator app setup.
-   * Saves the secret provisionally to the user record (2FA still disabled
-   * until the user confirms with a valid TOTP code).
+   *
+   * The secret is stored **only in Redis** (with a TTL) — NOT in the DB.
+   * The DB is only written after the user successfully verifies with a TOTP
+   * code via POST /2fa/enable. If the user abandons setup, the Redis key
+   * expires and no orphaned secret remains in the DB.
    *
    * @returns secret (base32, for manual entry), qrCode (data URL), and plain backup codes
    */
@@ -61,17 +66,51 @@ export class TwoFactorService {
       hashedBackupCodes.push(hash);
     }
 
-    // Save secret and hashed backup codes (user must verify with TOTP before 2FA is enabled)
-    const user = await this.userRepository.findOne({ where: { id: userId } });
-    if (user) {
-      user.twoFactorSecret = secret;
-      user.backupCodes = hashedBackupCodes;
-      await this.userRepository.save(user);
-    }
+    // Store secret + hashed backup codes in Redis (NOT in DB)
+    await this.setupCache.set(userId, { secret, hashedBackupCodes });
 
-    this.logger.log(`2FA setup secret generated for user ${userId}`);
+    this.logger.log(`2FA setup secret generated for user ${userId} (cached in Redis)`);
 
     return { secret, qrCode, backupCodes: plainBackupCodes };
+  }
+
+  /**
+   * Retrieve pending 2FA setup data from Redis.
+   * Returns null if the setup has expired or was never initiated.
+   */
+  async getPendingSetup(
+    userId: string,
+  ): Promise<{ secret: string; hashedBackupCodes: string[] } | null> {
+    return this.setupCache.get(userId);
+  }
+
+  /**
+   * Persist the 2FA secret and hashed backup codes to the DB.
+   * Called after successful TOTP verification in enable2FA.
+   */
+  async persistSetupToDB(
+    userId: string,
+    secret: string,
+    hashedBackupCodes: string[],
+  ): Promise<void> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new Error(`User ${userId} not found — cannot persist 2FA setup`);
+    }
+
+    user.twoFactorSecret = secret;
+    user.backupCodes = hashedBackupCodes;
+    await this.userRepository.save(user);
+
+    this.logger.log(`2FA setup persisted to DB for user ${userId}`);
+  }
+
+  /**
+   * Clear the pending setup from Redis.
+   * Called after successful persistence to DB, or on explicit cleanup.
+   */
+  async clearPendingSetup(userId: string): Promise<void> {
+    await this.setupCache.del(userId);
   }
 
   /**

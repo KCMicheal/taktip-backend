@@ -10,6 +10,7 @@ import { EmailFallbackService } from './services/email-fallback.service';
 import { AuthService } from './services/auth.service';
 import { TokenService } from './services/token.service';
 import { TwoFactorService } from './services/two-factor.service';
+import { TwoFactorSetupCacheService } from './services/two-factor-setup-cache.service';
 import { AuthController } from './controllers/auth.controller';
 import { User } from './entities/user.entity';
 import { RefreshToken } from './entities/refresh-token.entity';
@@ -54,6 +55,7 @@ import { CustomerModule } from '../customer/customer.module';
     EmailFallbackService,
     TokenService,
     AuthService,
+    TwoFactorSetupCacheService,
     TwoFactorService,
     // Guards
     {
@@ -79,6 +81,7 @@ import { CustomerModule } from '../customer/customer.module';
     TokenService,
     AuthService,
     TwoFactorService,
+    TwoFactorSetupCacheService,
     TypeOrmModule,
   ],
 })
