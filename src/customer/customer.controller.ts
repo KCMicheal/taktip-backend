@@ -20,7 +20,6 @@ import { UpdateCustomerProfileDto } from './dto/update-profile.dto';
 import { UpdateNotificationPreferencesDto } from './dto/update-notification-preferences.dto';
 import { UpdateCustomerPreferencesDto } from './dto/update-customer-preferences.dto';
 import { CreatePaymentMethodDto } from './dto/create-payment-method.dto';
-import { Enable2FaDto, Disable2FaDto } from '../auth/dto';
 
 @ApiTags('customer')
 @ApiBearerAuth()
@@ -144,38 +143,5 @@ export class CustomerController {
   ) {
     await this.customerService.deletePaymentMethod(user.sub, id);
     return { status: 'success', data: { message: 'Payment method deleted successfully' } };
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  //  2FA (Two-Factor Authentication)
-  // ─────────────────────────────────────────────────────────────
-
-  @Post('auth/2fa/enable')
-  @ApiOperation({ summary: 'Enable two-factor authentication' })
-  @ApiResponse({ status: 200, description: '2FA enabled' })
-  @ApiResponse({ status: 400, description: 'Validation error' })
-  @ApiResponse({ status: 409, description: '2FA already enabled' })
-  async enable2FA(
-    @CurrentUser() user: { sub: string },
-    @Body() dto: Enable2FaDto,
-  ) {
-    const result = await this.customerService.enable2FA(user.sub, dto.password);
-    return { status: 'success', data: result };
-  }
-
-  @Post('auth/2fa/disable')
-  @ApiOperation({ summary: 'Disable two-factor authentication' })
-  @ApiResponse({ status: 200, description: '2FA disabled' })
-  @ApiResponse({ status: 400, description: 'Validation error' })
-  async disable2FA(
-    @CurrentUser() user: { sub: string },
-    @Body() dto: Disable2FaDto,
-  ) {
-    const result = await this.customerService.disable2FA(
-      user.sub,
-      dto.password,
-      dto.otp,
-    );
-    return { status: 'success', data: result };
   }
 }

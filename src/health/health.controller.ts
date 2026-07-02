@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, HttpCode, HttpStatus, ServiceUnavailableException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiProduces } from '@nestjs/swagger';
 import {
   HealthResponse,
@@ -58,6 +58,7 @@ export class HealthController {
   }
 
   @Get('ready')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Readiness probe' })
   @ApiResponse({
     status: 200,
@@ -73,7 +74,10 @@ export class HealthController {
     const dbHealthy = (await this.healthService.checkDatabase()).status === 'up';
 
     if (!dbHealthy) {
-      return { status: 'not_ready', reason: 'Database not connected' };
+      throw new ServiceUnavailableException({
+        status: 'not_ready',
+        reason: 'Database not connected',
+      });
     }
 
     return { status: 'ready', timestamp: new Date().toISOString() };
