@@ -16,6 +16,8 @@ import { UpdateShiftDto } from './dto/update-shift.dto';
 import { ShiftStatus } from './enums/shift-status.enum';
 import { ShiftStaffStatus } from './enums/shift-staff-status.enum';
 import { PaginationService, PaginatedResult } from '../common/pagination';
+import { NotificationService } from '../notification/notification.service';
+import { NotificationType } from '../notification/enums/notification-type.enum';
 
 /**
  * Response shape for shift detail (includes assigned staff).
@@ -75,6 +77,7 @@ export class MerchantShiftsService {
     @InjectRepository(StaffProfile)
     private readonly staffProfileRepository: Repository<StaffProfile>,
     private readonly paginationService: PaginationService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -252,6 +255,13 @@ export class MerchantShiftsService {
         }),
       );
       await this.shiftStaffRepository.save(assignments);
+
+      // Send shift assignment notifications (fire-and-forget)
+      this.sendShiftAssignmentNotifications(
+        savedShift,
+        dto.staffProfileIds,
+        merchantId,
+      ).catch((err) => this.logger.warn(`Failed to send shift assignment notifications: ${err}`));
     }
 
     this.logger.log(`Shift "${dto.name}" created for merchant ${merchantId}`);
@@ -312,6 +322,13 @@ export class MerchantShiftsService {
         }),
       );
       await this.shiftStaffRepository.save(newAssignments);
+
+      // Send shift assignment notifications (fire-and-forget)
+      this.sendShiftAssignmentNotifications(
+        shift,
+        dto.addStaffProfileIds,
+        merchantId,
+      ).catch((err) => this.logger.warn(`Failed to send shift assignment notifications: ${err}`));
     }
 
     // Remove staff assignments
@@ -517,5 +534,55 @@ export class MerchantShiftsService {
     monday.setDate(now.getDate() - diff);
     monday.setHours(0, 0, 0, 0);
     return monday;
+  }
+
+  /**
+   * Send shift assignment notifications to staff members.
+   * Fire-and-forget — caller handles error logging.
+   */
+  private async sendShiftAssignmentNotifications(
+    shift: Shift,
+    staffProfileIds: string[],
+    merchantId: string,
+  ): Promise<void> {
+    // Get merchant name for the notification
+    const merchant = await this.merchantRepository.findOne({
+      where: { id: merchantId },
+      select: ['name'],
+    });
+
+    const merchantName = merchant?.name || 'your merchant';
+
+    for (const staffProfileId of staffProfileIds) {
+      // Find the staff user
+      const staffProfile = await this.staffProfileRepository.findOne({
+        where: { id: staffProfileId },
+        select: ['userId'],
+      });
+
+      if (!staffProfile?.userId) continue;
+
+      const shiftDate = shift.startsAt.toLocaleDateString('en-NG', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+
+      await this.notificationService.create({
+        userId: staffProfile.userId,
+        type: NotificationType.SHIFT_ASSIGNED,
+        title: 'You have been assigned to a shift',
+        body: `You've been assigned to "${shift.name}" at ${merchantName} on ${shiftDate}`,
+        data: {
+          shiftId: shift.id,
+          shiftName: shift.name,
+          merchantId,
+          merchantName,
+          startsAt: shift.startsAt.toISOString(),
+          endsAt: shift.endsAt.toISOString(),
+        },
+      });
+    }
   }
 }

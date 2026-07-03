@@ -28,6 +28,8 @@ import { Role } from '../enums/role.enum';
 import { MerchantService } from '../../merchant/merchant.service';
 import { CustomerService } from '../../customer/customer.service';
 import { StaffProfile } from '../../staff/entities/staff-profile.entity';
+import { NotificationService } from '../../notification/notification.service';
+import { NotificationType } from '../../notification/enums/notification-type.enum';
 
 export interface UserResponse {
   sub: string;
@@ -58,6 +60,7 @@ export class AuthService {
     private readonly merchantService: MerchantService,
     private readonly customerService: CustomerService,
     private readonly twoFactorService: TwoFactorService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -165,6 +168,15 @@ export class AuthService {
     // Send OTP email
     await this.mailService.sendOtpEmail(dto.email, otp, dto.businessName);
 
+    // Send welcome notification (fire-and-forget)
+    this.notificationService.create({
+      userId: user.id,
+      type: NotificationType.WELCOME,
+      title: 'Welcome to TakTip!',
+      body: `Welcome ${dto.firstName}! Your merchant account has been created.`,
+      data: { role: Role.MERCHANT },
+    }).catch((err) => this.logger.warn(`Failed to send welcome notification: ${err}`));
+
     // Dev-mode OTP logging for E2E automation
     if (process.env.NODE_ENV !== 'production') {
       this.logger.log(`[DEV] OTP for ${dto.email}: ${otp}`);
@@ -227,6 +239,15 @@ export class AuthService {
 
     // Send OTP email
     await this.mailService.sendOtpEmail(dto.email, otp, `${dto.firstName} ${dto.lastName}`);
+
+    // Send welcome notification (fire-and-forget)
+    this.notificationService.create({
+      userId: user.id,
+      type: NotificationType.WELCOME,
+      title: 'Welcome to TakTip!',
+      body: `Welcome ${dto.firstName}! Your customer account has been created.`,
+      data: { role: Role.CUSTOMER },
+    }).catch((err) => this.logger.warn(`Failed to send welcome notification: ${err}`));
 
     // Dev-mode OTP logging for E2E automation
     if (process.env.NODE_ENV !== 'production') {

@@ -12,6 +12,7 @@ import { PayoutStatus } from '../../src/payouts/enums/payout-status.enum';
 import { Wallet } from '../../src/wallet/entities/wallet.entity';
 import { StaffProfile } from '../../src/staff/entities/staff-profile.entity';
 import { Merchant } from '../../src/merchant/entities/merchant.entity';
+import { NotificationService } from '../../src/notification/notification.service';
 
 describe('PayoutService', () => {
   let service: PayoutService;
@@ -154,6 +155,13 @@ describe('PayoutService', () => {
         {
           provide: ConfigService,
           useValue: mockConfigService,
+        },
+        {
+          provide: NotificationService,
+          useValue: {
+            create: jest.fn().mockResolvedValue({ id: 'notif-uuid' }),
+            createBulk: jest.fn().mockResolvedValue([]),
+          },
         },
       ],
     }).compile();

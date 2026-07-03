@@ -8,10 +8,12 @@ import { ShiftsService } from './shifts.service';
 import { MerchantShiftsService } from './merchant-shifts.service';
 import { ShiftsController } from './shifts.controller';
 import { MerchantShiftsController } from './merchant-shifts.controller';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Shift, ShiftStaff, StaffProfile, Merchant]),
+    NotificationModule,
   ],
   controllers: [ShiftsController, MerchantShiftsController],
   providers: [ShiftsService, MerchantShiftsService],

@@ -9,11 +9,13 @@ import { PayoutService } from './payouts.service';
 import { PayoutProcessor } from './payouts.processor';
 import { StaffPayoutController } from './staff-payout.controller';
 import { AdminPayoutController } from './admin-payout.controller';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Payout, Wallet, StaffProfile, Merchant]),
     BullModule.registerQueue({ name: 'payouts' }),
+    NotificationModule,
   ],
   controllers: [StaffPayoutController, AdminPayoutController],
   providers: [PayoutService, PayoutProcessor],

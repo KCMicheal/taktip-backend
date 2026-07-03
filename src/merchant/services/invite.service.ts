@@ -24,6 +24,8 @@ import {
   PaginationService,
   PaginatedResult,
 } from '../../common/pagination';
+import { NotificationService } from '../../notification/notification.service';
+import { NotificationType } from '../../notification/enums/notification-type.enum';
 
 
 @Injectable()
@@ -45,6 +47,7 @@ export class InviteService {
     private readonly walletService: WalletService,
     private readonly qrCodesService: QrCodesService,
     private readonly paginationService: PaginationService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -127,6 +130,20 @@ export class InviteService {
       // Send invite email
       await this.sendInviteEmail(dto.email, token, merchant.name);
 
+      // Send notification to the merchant who sent the invite (fire-and-forget)
+      this.notificationService.create({
+        userId: invitedById,
+        type: NotificationType.STAFF_INVITE,
+        title: 'Staff invitation sent',
+        body: `You've invited ${dto.email} to join ${merchant.name}`,
+        data: {
+          inviteId: savedInvite.id,
+          email: dto.email,
+          merchantId,
+          merchantName: merchant.name,
+        },
+      }).catch((err) => this.logger.warn(`Failed to send invite notification: ${err}`));
+
       return savedInvite;
     }
 
@@ -152,6 +169,20 @@ export class InviteService {
 
     // Send invite email
     await this.sendInviteEmail(dto.email, token, merchant.name);
+
+    // Send notification to the merchant who sent the invite (fire-and-forget)
+    this.notificationService.create({
+      userId: invitedById,
+      type: NotificationType.STAFF_INVITE,
+      title: 'Staff invitation sent',
+      body: `You've invited ${dto.email} to join ${merchant.name}`,
+      data: {
+        inviteId: savedInvite.id,
+        email: dto.email,
+        merchantId,
+        merchantName: merchant.name,
+      },
+    }).catch((err) => this.logger.warn(`Failed to send invite notification: ${err}`));
 
     return savedInvite;
   }

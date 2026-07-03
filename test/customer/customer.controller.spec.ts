@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { NotFoundException } from '@nestjs/common';
 import { CustomerController } from '../../src/customer/customer.controller';
 import { CustomerService } from '../../src/customer/customer.service';
+import { CustomerActivityService } from '../../src/customer/services/customer-activity.service';
 import { Role } from '../../src/auth/enums/role.enum';
 
 describe('CustomerController', () => {
@@ -48,6 +49,12 @@ describe('CustomerController', () => {
           useValue: mockCustomerService,
         },
         {
+          provide: CustomerActivityService,
+          useValue: {
+            getActivity: jest.fn().mockResolvedValue({ items: [], total: 0, page: 1, limit: 20 }),
+          },
+        },
+        {
           provide: JwtService,
           useValue: mockJwtService,
         },
@@ -86,6 +93,10 @@ describe('CustomerController', () => {
           firstName: 'John',
           lastName: 'Doe',
           phone: '+2348012345678',
+          isTwoFactorEnabled: undefined,
+          notificationPreferences: undefined,
+          preferences: undefined,
+          paymentMethods: undefined,
         },
       });
       expect(mockCustomerService.getByUserId).toHaveBeenCalledWith('user-uuid');

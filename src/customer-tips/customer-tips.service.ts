@@ -31,6 +31,8 @@ import {
 import { ExportTipsQueryDto } from './dto/export-tips-query.dto';
 import { PaginationService, PaginatedResult } from '../common/pagination';
 import { TipHistoryQueryDto, TipDirection, TipPeriod, TipStatusFilter } from './dto/tip-history-query.dto';
+import { NotificationService } from '../notification/notification.service';
+import { NotificationType } from '../notification/enums/notification-type.enum';
 
 /**
  * Maximum tip amount per transaction (user-defined limit).
@@ -66,6 +68,7 @@ export class CustomerTipsService {
     private readonly configService: ConfigService,
     private readonly mailService: MailService,
     private readonly paginationService: PaginationService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -162,6 +165,11 @@ export class CustomerTipsService {
     // Notify recipient via email (fire-and-forget)
     this.notifyTipReceived(savedTip, recipientProfile, senderProfile.displayName || 'A customer').catch(
       (err: Error) => this.logger.error(`Failed to send tip notification email: ${err.message}`, err.stack),
+    );
+
+    // Send in-app notifications to sender and recipient (fire-and-forget)
+    this.sendC2CTipNotifications(savedTip, senderProfile, recipientProfile).catch(
+      (err: Error) => this.logger.error(`Failed to send C2C tip in-app notifications: ${err.message}`, err.stack),
     );
 
     this.logger.log(
@@ -690,5 +698,41 @@ export class CustomerTipsService {
       senderDisplayName,
       tip.amount,
     );
+  }
+
+  /**
+   * Send in-app notifications to sender and recipient for C2C tips.
+   * Fire-and-forget — caller handles error logging.
+   */
+  private async sendC2CTipNotifications(
+    tip: Tip,
+    senderProfile: CustomerProfile,
+    recipientProfile: CustomerProfile,
+  ): Promise<void> {
+    // Notify sender
+    await this.notificationService.create({
+      userId: senderProfile.userId,
+      type: NotificationType.TIP_SENT,
+      title: 'Tip sent!',
+      body: `You sent NGN ${tip.amount.toFixed(2)} tip`,
+      data: {
+        tipId: tip.id,
+        amount: tip.amount,
+        recipientName: recipientProfile.displayName || 'A customer',
+      },
+    });
+
+    // Notify recipient
+    await this.notificationService.create({
+      userId: recipientProfile.userId,
+      type: NotificationType.TIP_RECEIVED,
+      title: 'You received a tip!',
+      body: `You received NGN ${tip.amount.toFixed(2)} from ${senderProfile.displayName || 'A customer'}`,
+      data: {
+        tipId: tip.id,
+        amount: tip.amount,
+        senderName: senderProfile.displayName || 'A customer',
+      },
+    });
   }
 }

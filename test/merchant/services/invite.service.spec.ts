@@ -14,6 +14,7 @@ import { Role } from '../../../src/auth/enums/role.enum';
 import { InviteStatus } from '../../../src/common/enums/invite-status.enum';
 import { InviteStaffDto, AcceptInviteDto } from '../../../src/merchant/dto/invite.dto';
 import { PaginationService } from '../../../src/common/pagination';
+import { NotificationService } from '../../../src/notification/notification.service';
 
 describe('InviteService', () => {
   let service: InviteService;
@@ -67,6 +68,11 @@ describe('InviteService', () => {
     getSkip: jest.fn().mockReturnValue(0),
   };
 
+  const mockNotificationService = {
+    create: jest.fn().mockResolvedValue({ id: 'notif-uuid' }),
+    createBulk: jest.fn().mockResolvedValue([]),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -106,6 +112,10 @@ describe('InviteService', () => {
         {
           provide: PaginationService,
           useValue: mockPaginationService,
+        },
+        {
+          provide: NotificationService,
+          useValue: mockNotificationService,
         },
       ],
     }).compile();

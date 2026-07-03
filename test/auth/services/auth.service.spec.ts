@@ -18,6 +18,7 @@ import { MerchantService } from '@/merchant/merchant.service';
 import { CustomerService } from '@/customer/customer.service';
 import { TwoFactorService } from '@/auth/services/two-factor.service';
 import { StaffProfile } from '@/staff/entities/staff-profile.entity';
+import { NotificationService } from '@/notification/notification.service';
 
 jest.mock('bcrypt');
 jest.mock('jose');
@@ -145,6 +146,13 @@ describe('AuthService', () => {
           provide: getRepositoryToken(StaffProfile),
           useValue: {
             find: jest.fn(),
+          },
+        },
+        {
+          provide: NotificationService,
+          useValue: {
+            create: jest.fn().mockResolvedValue({ id: 'notif-uuid' }),
+            createBulk: jest.fn().mockResolvedValue([]),
           },
         },
       ],

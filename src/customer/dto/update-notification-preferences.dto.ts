@@ -41,4 +41,20 @@ export class UpdateNotificationPreferencesDto {
   @IsOptional()
   @IsBoolean()
   marketingEmails?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Receive SMS notifications',
+    example: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  smsEnabled?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Receive monthly summary reports',
+    example: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  monthlyReports?: boolean;
 }
