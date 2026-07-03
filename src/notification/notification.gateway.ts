@@ -5,9 +5,8 @@ import {
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Logger, Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
 import { Server, Socket } from 'socket.io';
+import { JwtService } from '../auth/services/jwt.service';
 
 /** Shape of the decoded JWT payload (only the fields we need). */
 interface JwtPayload {
@@ -36,12 +35,9 @@ export class NotificationGateway
   private readonly logger = new Logger(NotificationGateway.name);
   private readonly connectedUsers = new Map<string, Set<string>>(); // userId → Set<socketId>
 
-  constructor(
-    private readonly configService: ConfigService,
-    private readonly jwtService: JwtService,
-  ) {}
+  constructor(private readonly jwtService: JwtService) {}
 
-  handleConnection(client: AuthenticatedSocket): void {
+  async handleConnection(client: AuthenticatedSocket): Promise<void> {
     try {
       const token =
         client.handshake.auth?.token ||
@@ -53,7 +49,7 @@ export class NotificationGateway
         return;
       }
 
-      const payload = this.jwtService.verify<JwtPayload>(token as string);
+      const payload = await this.jwtService.verify(token as string);
       const userId = payload.sub;
 
       if (!userId) {

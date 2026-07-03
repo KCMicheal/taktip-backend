@@ -127,7 +127,7 @@ export class NotificationService {
       this.notificationRepository
         .createQueryBuilder('n')
         .where('n.user_id = :userId', { userId })
-        .orderBy('n.created_at', 'DESC');
+        .orderBy('n."createdAt"', 'DESC');
 
     // Filter by type
     if (query.type) {
@@ -290,7 +290,7 @@ export class NotificationService {
     const result = await this.notificationRepository
       .createQueryBuilder()
       .delete()
-      .where('created_at < :cutoff', { cutoff: cutoffDate })
+      .where('"createdAt" < :cutoff', { cutoff: cutoffDate })
       .execute();
 
     const deletedCount = result.affected || 0;
