@@ -7,19 +7,22 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Role } from '../auth/enums/role.enum';
 import { CustomerService } from './customer.service';
+import { CustomerActivityService } from './services/customer-activity.service';
 import { UpdateCustomerProfileDto } from './dto/update-profile.dto';
 import { UpdateNotificationPreferencesDto } from './dto/update-notification-preferences.dto';
 import { UpdateCustomerPreferencesDto } from './dto/update-customer-preferences.dto';
 import { CreatePaymentMethodDto } from './dto/create-payment-method.dto';
+import { ActivityQueryDto } from './dto/activity-query.dto';
 
 @ApiTags('customer')
 @ApiBearerAuth()
@@ -27,7 +30,10 @@ import { CreatePaymentMethodDto } from './dto/create-payment-method.dto';
 @Roles(Role.CUSTOMER)
 @Controller('customer')
 export class CustomerController {
-  constructor(private readonly customerService: CustomerService) {}
+  constructor(
+    private readonly customerService: CustomerService,
+    private readonly activityService: CustomerActivityService,
+  ) {}
 
   // ─────────────────────────────────────────────────────────────
   //  Profile
@@ -144,5 +150,40 @@ export class CustomerController {
   ) {
     await this.customerService.deletePaymentMethod(user.sub, id);
     return { status: 'success', data: { message: 'Payment method deleted successfully' } };
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  //  Payment Methods (Read)
+  // ─────────────────────────────────────────────────────────────
+
+  @Get('profile/payment-methods')
+  @ApiOperation({ summary: 'Get saved payment methods (bank name and account number)' })
+  @ApiResponse({ status: 200, description: 'List of saved payment methods' })
+  async getPaymentMethods(@CurrentUser() user: { sub: string }) {
+    const methods = await this.customerService.getPaymentMethods(user.sub);
+    return { status: 'success', data: methods };
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  //  Activity Feed
+  // ─────────────────────────────────────────────────────────────
+
+  @Get('activity')
+  @ApiOperation({
+    summary: 'Get unified customer activity feed',
+    description:
+      'Returns a chronological feed of all customer activity: tips sent/received, deposits, withdrawals, transfers, and fees.',
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default: 20, max: 100)' })
+  @ApiQuery({ name: 'type', required: false, enum: ['all', 'tips', 'wallet'], description: 'Filter by activity source (default: all)' })
+  @ApiQuery({ name: 'period', required: false, enum: ['all', '7d', '30d', '90d'], description: 'Filter by time period (default: all)' })
+  @ApiResponse({ status: 200, description: 'Paginated activity feed' })
+  async getActivity(
+    @CurrentUser() user: { sub: string },
+    @Query() query: ActivityQueryDto,
+  ) {
+    const results = await this.activityService.getActivity(user.sub, query);
+    return { status: 'success', data: results };
   }
 }

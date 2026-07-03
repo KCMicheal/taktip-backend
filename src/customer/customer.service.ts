@@ -103,6 +103,8 @@ export class CustomerService {
       tipReceived?: boolean;
       tipWithdrawn?: boolean;
       marketingEmails?: boolean;
+      smsEnabled?: boolean;
+      monthlyReports?: boolean;
       [key: string]: unknown;
     },
   ): Promise<Record<string, unknown>> {
@@ -213,5 +215,26 @@ export class CustomerService {
     await this.customerProfileRepository.save(profile);
 
     this.logger.log(`Payment method deleted for user ${userId}: ${methodId}`);
+  }
+
+  /**
+   * Get all payment methods for the customer.
+   * Returns bank name and account number (similar to staff payout method).
+   */
+  async getPaymentMethods(
+    userId: string,
+  ): Promise<Array<{ id: string; type: string; bankName: string; accountNumber: string }>> {
+    const profile = await this.getByUserId(userId);
+
+    const methods = profile.paymentMethods ?? [];
+    return methods.map((m) => {
+      const details = (m.details ?? {}) as Record<string, unknown>;
+      return {
+        id: String(m.id ?? ''),
+        type: String(m.type ?? ''),
+        bankName: String(details.bankName ?? 'Unknown Bank'),
+        accountNumber: String(details.accountNumber ?? ''),
+      };
+    });
   }
 }
