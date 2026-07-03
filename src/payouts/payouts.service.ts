@@ -15,6 +15,8 @@ import { PayoutStatus } from './enums/payout-status.enum';
 import { Wallet } from '../wallet/entities/wallet.entity';
 import { StaffProfile } from '../staff/entities/staff-profile.entity';
 import { Merchant } from '../merchant/entities/merchant.entity';
+import { NotificationService } from '../notification/notification.service';
+import { NotificationType } from '../notification/enums/notification-type.enum';
 
 /**
  * Platform fee as a fraction of the payout amount.
@@ -38,6 +40,7 @@ export class PayoutService {
     @InjectQueue('payouts')
     private readonly payoutQueue: Queue,
     private readonly configService: ConfigService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -135,6 +138,20 @@ export class PayoutService {
         `Payout requested: ${reference} — ${amount} (net: ${netAmount}) for staff profile ${staffProfile.id}`,
       );
 
+      // Send notification to staff member (fire-and-forget)
+      this.notificationService.create({
+        userId: staffProfile.userId,
+        type: NotificationType.PAYOUT_REQUESTED,
+        title: 'Payout requested',
+        body: `Your payout of NGN ${amount.toFixed(2)} has been submitted for processing`,
+        data: {
+          payoutId: payout.id,
+          amount,
+          netAmount,
+          reference,
+        },
+      }).catch((err) => this.logger.warn(`Failed to send payout notification: ${err}`));
+
       return payout;
     });
   }
@@ -208,6 +225,21 @@ export class PayoutService {
       this.logger.log(
         `Merchant payout requested: ${reference} — ${amount} (net: ${netAmount}) for merchant ${merchant.id}`,
       );
+
+      // Send notification to merchant owner (fire-and-forget)
+      this.notificationService.create({
+        userId: merchant.ownerId,
+        type: NotificationType.PAYOUT_REQUESTED,
+        title: 'Payout requested',
+        body: `Your merchant payout of NGN ${amount.toFixed(2)} has been submitted for processing`,
+        data: {
+          payoutId: payout.id,
+          amount,
+          netAmount,
+          reference,
+          merchantId: merchant.id,
+        },
+      }).catch((err) => this.logger.warn(`Failed to send merchant payout notification: ${err}`));
 
       return payout;
     });
@@ -338,6 +370,11 @@ export class PayoutService {
         `Payout ${payout.reference} rejected by admin ${adminId}${notes ? `: ${notes}` : ''}`,
       );
 
+      // Send rejection notification to staff member (fire-and-forget)
+      this.sendPayoutRejectionNotification(payout, notes).catch(
+        (err) => this.logger.warn(`Failed to send payout rejection notification: ${err}`),
+      );
+
       return payout;
     });
   }
@@ -450,6 +487,22 @@ export class PayoutService {
 
     this.logger.log(`Customer payout ${payout.reference} enqueued for processing`);
 
+    // Send notification to customer (fire-and-forget)
+    if (payout.customerProfileId) {
+      this.notificationService.create({
+        userId: payout.customerProfileId,
+        type: NotificationType.PAYOUT_REQUESTED,
+        title: 'Withdrawal requested',
+        body: `Your withdrawal of NGN ${amount.toFixed(2)} has been submitted for processing`,
+        data: {
+          payoutId: payout.id,
+          amount,
+          netAmount,
+          reference: payout.reference,
+        },
+      }).catch((err) => this.logger.warn(`Failed to send customer payout notification: ${err}`));
+    }
+
     return payout;
   }
 
@@ -557,6 +610,9 @@ export class PayoutService {
       } else {
         this.logger.warn(`Payout ${payout.reference} marked as FAILED after Paystack transfer attempt`);
       }
+
+      // Send notification based on result
+      await this.sendPayoutResultNotification(payout, paystackTransferSucceeded);
     } catch (error) {
       this.logger.error(
         `Payout ${payout.reference} processing failed: ${(error as Error).message}`,
@@ -599,6 +655,112 @@ export class PayoutService {
       payout.payoutStatus = PayoutStatus.FAILED;
       payout.notes = (error as Error).message;
       await this.payoutRepository.save(payout);
+
+      // Send failure notification
+      await this.sendPayoutResultNotification(payout, false);
+    }
+  }
+
+  /**
+   * Send notification for payout completion or failure.
+   * Determines the recipient based on which profile ID is set.
+   */
+  private async sendPayoutResultNotification(
+    payout: Payout,
+    succeeded: boolean,
+  ): Promise<void> {
+    try {
+      let userId: string | null = null;
+
+      if (payout.customerProfileId) {
+        // Customer payout — find user via customer profile
+        const profile = await this.staffProfileRepository.manager
+          .getRepository('CustomerProfile')
+          .findOne({ where: { id: payout.customerProfileId }, select: ['userId'] });
+        userId = (profile as { userId?: string })?.userId ?? null;
+      } else if (payout.staffProfileId && payout.staffProfileId !== '00000000-0000-0000-0000-000000000000') {
+        // Staff payout — find user via staff profile
+        const profile = await this.staffProfileRepository.findOne({
+          where: { id: payout.staffProfileId },
+          select: ['userId'],
+        });
+        userId = profile?.userId ?? null;
+      } else if (payout.merchantId) {
+        // Merchant payout — find owner via merchant
+        const merchant = await this.merchantRepository.findOne({
+          where: { id: payout.merchantId },
+          select: ['ownerId'],
+        });
+        userId = merchant?.ownerId ?? null;
+      }
+
+      if (!userId) {
+        this.logger.warn(`Cannot send payout notification: no userId found for payout ${payout.reference}`);
+        return;
+      }
+
+      const type = succeeded
+        ? NotificationType.PAYOUT_COMPLETED
+        : NotificationType.PAYOUT_FAILED;
+
+      const title = succeeded ? 'Payout completed' : 'Payout failed';
+      const body = succeeded
+        ? `Your payout of NGN ${payout.netAmount.toFixed(2)} has been completed`
+        : `Your payout of NGN ${payout.amount.toFixed(2)} could not be processed. Please contact support.`;
+
+      await this.notificationService.create({
+        userId,
+        type,
+        title,
+        body,
+        data: {
+          payoutId: payout.id,
+          amount: payout.amount,
+          netAmount: payout.netAmount,
+          reference: payout.reference,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`Failed to send payout result notification: ${String(err)}`);
+    }
+  }
+
+  /**
+   * Send notification for payout rejection.
+   */
+  private async sendPayoutRejectionNotification(
+    payout: Payout,
+    reason?: string,
+  ): Promise<void> {
+    try {
+      const profile = await this.staffProfileRepository.findOne({
+        where: { id: payout.staffProfileId },
+        select: ['userId'],
+      });
+
+      if (!profile?.userId) {
+        this.logger.warn(`Cannot send payout rejection notification: no userId found for staff ${payout.staffProfileId}`);
+        return;
+      }
+
+      const body = reason
+        ? `Your payout of NGN ${payout.amount.toFixed(2)} was rejected. Reason: ${reason}`
+        : `Your payout of NGN ${payout.amount.toFixed(2)} was rejected. Please contact support.`;
+
+      await this.notificationService.create({
+        userId: profile.userId,
+        type: NotificationType.PAYOUT_REJECTED,
+        title: 'Payout rejected',
+        body,
+        data: {
+          payoutId: payout.id,
+          amount: payout.amount,
+          reference: payout.reference,
+          reason,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`Failed to send payout rejection notification: ${String(err)}`);
     }
   }
 }

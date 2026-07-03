@@ -20,6 +20,7 @@ import { C2cTipSenderType } from '../../src/tips/enums/c2c-tip-sender-type.enum'
 import { Role } from '../../src/auth/enums/role.enum';
 import { PaymentProvider } from '../../src/payments/providers/interfaces/payment-provider.interface';
 import { PaginationService } from '../../src/common/pagination/pagination.service';
+import { NotificationService } from '../../src/notification/notification.service';
 
 describe('CustomerTipsService', () => {
   let service: CustomerTipsService;
@@ -217,6 +218,13 @@ describe('CustomerTipsService', () => {
         {
           provide: PaginationService,
           useValue: paginationService,
+        },
+        {
+          provide: NotificationService,
+          useValue: {
+            create: jest.fn().mockResolvedValue({ id: 'notif-uuid' }),
+            createBulk: jest.fn().mockResolvedValue([]),
+          },
         },
       ],
     }).compile();

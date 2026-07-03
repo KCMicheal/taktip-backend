@@ -20,6 +20,7 @@ import { jwtAuthGuard } from './guards/jwt-auth.guard';
 import { rolesGuard } from './guards/roles.guard';
 import { MerchantModule } from '../merchant/merchant.module';
 import { CustomerModule } from '../customer/customer.module';
+import { NotificationModule } from '../notification/notification.module';
 
 /**
  * Auth Module - Provides JWT authentication and authorization functionality
@@ -40,6 +41,7 @@ import { CustomerModule } from '../customer/customer.module';
     ConfigModule,
     MerchantModule,
     CustomerModule,
+    NotificationModule,
   ],
   controllers: [AuthController],
   providers: [

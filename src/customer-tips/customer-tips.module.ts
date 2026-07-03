@@ -12,6 +12,7 @@ import { User } from '../auth/entities/user.entity';
 import { CustomerModule } from '../customer/customer.module';
 import { WalletModule } from '../wallet/wallet.module';
 import { PaymentsModule } from '../payments/payments.module';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { PaymentsModule } from '../payments/payments.module';
     CustomerModule,
     WalletModule,
     PaymentsModule,
+    NotificationModule,
   ],
   controllers: [CustomerTipsController],
   providers: [CustomerTipsService],

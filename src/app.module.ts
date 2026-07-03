@@ -20,6 +20,7 @@ import { CustomerTipsModule } from './customer-tips/customer-tips.module';
 import { ShiftsModule } from './shifts/shifts.module';
 import { BankModule } from './bank/bank.module';
 import { AdminModule } from './admin/admin.module';
+import { NotificationModule } from './notification/notification.module';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 
@@ -90,6 +91,7 @@ import { GlobalExceptionFilter } from './common/filters/global-exception.filter'
     CustomerTipsModule,
     ShiftsModule,
     AdminModule,
+    NotificationModule,
   ],
   controllers: [],
   providers: [

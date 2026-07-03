@@ -9,6 +9,7 @@ import { StaffProfile } from '../../src/staff/entities/staff-profile.entity';
 import { CustomerProfile } from '../../src/customer/entities/customer-profile.entity';
 import { Merchant } from '../../src/merchant/entities/merchant.entity';
 import { User } from '../../src/auth/entities/user.entity';
+import { NotificationService } from '../../src/notification/notification.service';
 
 describe('TipsService', () => {
   let service: TipsService;
@@ -132,6 +133,13 @@ describe('TipsService', () => {
         {
           provide: getRepositoryToken(Merchant),
           useValue: mockMerchantRepository,
+        },
+        {
+          provide: NotificationService,
+          useValue: {
+            create: jest.fn().mockResolvedValue({ id: 'notif-uuid' }),
+            createBulk: jest.fn().mockResolvedValue([]),
+          },
         },
       ],
     }).compile();

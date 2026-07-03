@@ -8,6 +8,8 @@ import { StaffProfile } from '../staff/entities/staff-profile.entity';
 import { CustomerProfile } from '../customer/entities/customer-profile.entity';
 import { Merchant } from '../merchant/entities/merchant.entity';
 import { PaginatedResult } from '../common/pagination';
+import { NotificationService } from '../notification/notification.service';
+import { NotificationType } from '../notification/enums/notification-type.enum';
 
 @Injectable()
 export class TipsService {
@@ -22,6 +24,7 @@ export class TipsService {
     private readonly customerProfileRepository: Repository<CustomerProfile>,
     @InjectRepository(Merchant)
     private readonly merchantRepository: Repository<Merchant>,
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -58,6 +61,32 @@ export class TipsService {
       `Tip of ${data.amount} ${data.currency || 'NGN'} recorded ` +
         `for staff ${data.staffProfileId} at merchant ${data.merchantId}`,
     );
+
+    // Send notification to staff member
+    try {
+      const staffProfile = await this.staffProfileRepository.findOne({
+        where: { id: data.staffProfileId },
+        relations: ['user'],
+      });
+
+      if (staffProfile?.userId) {
+        await this.notificationService.create({
+          userId: staffProfile.userId,
+          type: NotificationType.TIP_RECEIVED,
+          title: 'You received a tip!',
+          body: `${data.currency || 'NGN'} ${data.amount.toFixed(2)} tip received`,
+          data: {
+            tipId: saved.id,
+            amount: data.amount,
+            currency: data.currency || 'NGN',
+            merchantId: data.merchantId,
+          },
+        });
+      }
+    } catch (error) {
+      // Notification failure should not block tip recording
+      this.logger.warn(`Failed to send tip notification: ${String(error)}`);
+    }
 
     return saved;
   }

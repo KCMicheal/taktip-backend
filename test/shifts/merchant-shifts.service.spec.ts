@@ -16,6 +16,7 @@ import { CreateShiftDto } from '../../src/shifts/dto/create-shift.dto';
 import { UpdateShiftDto } from '../../src/shifts/dto/update-shift.dto';
 import { ShiftStatus } from '../../src/shifts/enums/shift-status.enum';
 import { ShiftStaffStatus } from '../../src/shifts/enums/shift-staff-status.enum';
+import { NotificationService } from '../../src/notification/notification.service';
 
 describe('MerchantShiftsService', () => {
   let service: MerchantShiftsService;
@@ -133,6 +134,13 @@ describe('MerchantShiftsService', () => {
         {
           provide: PaginationService,
           useValue: mockPaginationService,
+        },
+        {
+          provide: NotificationService,
+          useValue: {
+            create: jest.fn().mockResolvedValue({ id: 'notif-uuid' }),
+            createBulk: jest.fn().mockResolvedValue([]),
+          },
         },
       ],
     }).compile();

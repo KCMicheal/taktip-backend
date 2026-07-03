@@ -10,9 +10,16 @@ import { MerchantService } from './merchant.service';
 import { InviteService } from './services/invite.service';
 import { MerchantController } from './merchant.controller';
 import { AuthInviteController } from './controllers/auth-invite.controller';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Merchant, StaffInvite, StaffProfile]), forwardRef(() => WalletModule), TipsModule, QrCodesModule],
+  imports: [
+    TypeOrmModule.forFeature([Merchant, StaffInvite, StaffProfile]),
+    forwardRef(() => WalletModule),
+    TipsModule,
+    QrCodesModule,
+    NotificationModule,
+  ],
   controllers: [MerchantController, AuthInviteController],
   providers: [MerchantService, InviteService],
   exports: [MerchantService, InviteService, TypeOrmModule],

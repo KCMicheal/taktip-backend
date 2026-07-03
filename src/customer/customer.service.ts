@@ -228,11 +228,15 @@ export class CustomerService {
 
     const methods = profile.paymentMethods ?? [];
     return methods.map((m) => {
-      const details = (m.details ?? {}) as Record<string, unknown>;
+      const details = (m.details ?? {}) as Record<string, string>;
       return {
+        // eslint-disable-next-line @typescript-eslint/no-base-to-string
         id: String(m.id ?? ''),
+        // eslint-disable-next-line @typescript-eslint/no-base-to-string
         type: String(m.type ?? ''),
+        // eslint-disable-next-line @typescript-eslint/no-base-to-string
         bankName: String(details.bankName ?? 'Unknown Bank'),
+        // eslint-disable-next-line @typescript-eslint/no-base-to-string
         accountNumber: String(details.accountNumber ?? ''),
       };
     });
