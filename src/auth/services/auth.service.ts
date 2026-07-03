@@ -527,7 +527,7 @@ export class AuthService {
   async refreshTokens(
     dto: RefreshTokenDto,
   ): Promise<TokenPair & { user: UserResponse }> {
-    const result = await this.tokenService.refreshTokenPair(dto.refreshToken);
+    const result = await this.tokenService.refreshTokenPair(dto.refreshToken!);
 
     if (!result) {
       throw new UnauthorizedException('Invalid or expired refresh token');
@@ -553,7 +553,7 @@ export class AuthService {
    */
   async logout(dto: RefreshTokenDto, ipAddress?: string): Promise<{ message: string }> {
     const revoked = await this.tokenService.revokeRefreshToken(
-      dto.refreshToken,
+      dto.refreshToken!,
       ipAddress,
     );
 
